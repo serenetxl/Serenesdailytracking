@@ -227,7 +227,91 @@
   }
   .toast.show{ opacity:1; transform: translateX(-50%) translateY(0); }
 
+  /* Morning Dailies Timer */
+  .timer-card{ text-align:center; }
+  .timer-label{
+    font-family: var(--font-mono); font-size:11px; letter-spacing:0.12em; color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+  .timer-display{
+    font-family: var(--font-display); font-size: 44px; font-weight:700; color: var(--ink);
+    letter-spacing: 0.02em; line-height:1.1; font-variant-numeric: tabular-nums;
+  }
+  .timer-display.warn{ color: var(--gold); }
+  .timer-display.urgent{ color: var(--rose); }
+  .timer-display.done{ color: var(--teal); }
+  .timer-flow{
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing:0.04em;
+    margin-top: 4px; margin-bottom: 14px;
+  }
+  .timer-controls{ display:flex; gap:8px; justify-content:center; }
+  .timer-btn{
+    background: var(--bg-elev); border:1px solid var(--card-border); color: var(--ink-dim);
+    padding:9px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
+    font-family: var(--font-body); transition: all .15s ease;
+  }
+  .timer-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .timer-btn.primary{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
+  .timer-btn.primary:hover{ background: rgba(221,143,92,0.26); }
+
+  .timer-banner{
+    margin-top: 16px; padding: 11px 14px; border-radius: 10px; font-size: 13px; font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left;
+    animation: bannerIn .3s ease;
+  }
+  .timer-banner.milestone-20{ background: var(--gold-soft); color: var(--gold); border:1px solid rgba(221,143,92,0.3); }
+  .timer-banner.milestone-10{ background: var(--rose-soft); color: var(--rose); border:1px solid rgba(216,116,154,0.3); }
+  .timer-banner.milestone-done{
+    background: var(--teal-soft); color: var(--teal); border:1px solid rgba(70,163,132,0.35);
+    animation: bannerIn .3s ease, bannerPulse 2.2s ease-in-out infinite;
+  }
+  .banner-dismiss{
+    background:none; border:none; color: inherit; opacity:0.6; cursor:pointer; font-size:13px;
+    flex-shrink:0; padding:2px 4px;
+  }
+  .banner-dismiss:hover{ opacity:1; }
+  @keyframes bannerIn{ from{ opacity:0; transform: translateY(-4px);} to{ opacity:1; transform:translateY(0);} }
+  @keyframes bannerPulse{ 0%,100%{ box-shadow: 0 0 0 rgba(70,163,132,0);} 50%{ box-shadow: 0 0 14px rgba(70,163,132,0.35);} }
+
   ::selection{ background: var(--gold-soft); }
+
+  /* Total FYC Opened summary */
+  .fyc-opened-card{ text-align:center; padding: 16px 20px; }
+  .fyc-opened-label{ font-family: var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color: var(--ink-faint); }
+  .fyc-opened-sub{ text-transform:none; letter-spacing:normal; font-size:11px; }
+  .fyc-opened-value{ font-family: var(--font-display); font-size:28px; font-weight:700; color: var(--gold); margin-top:4px; }
+
+  /* Pipeline / Kanban */
+  .case-form{ margin-top: 14px; }
+  .case-form .edit-row{ margin-top:0; align-items:flex-end; }
+  .case-form input, .case-form select{
+    background: var(--bg-elev); border:1px solid var(--card-border); color:var(--ink);
+    border-radius:8px; padding:7px 10px; font-family: var(--font-body); font-size:13px; width:130px;
+  }
+  .case-form input:focus, .case-form select:focus{ outline:none; border-color: var(--gold); }
+
+  .kanban{ display:grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap:12px; overflow-x:auto; padding-bottom: 6px; }
+  @media (max-width: 900px){ .kanban{ grid-auto-flow:column; grid-template-columns: none; grid-auto-columns: 78vw; } }
+  .kanban-col{ background: var(--card); border:1px solid var(--card-border); border-radius: var(--radius); padding:12px; box-shadow: 0 2px 10px rgba(53,48,74,0.05); min-width:0; }
+  .kanban-col-head{ margin-bottom:10px; }
+  .kanban-col-title{ font-family: var(--font-display); font-weight:600; font-size:13px; }
+  .kanban-col-sub{ font-family: var(--font-mono); font-size:11px; color: var(--ink-faint); margin-top:2px; }
+  .kanban-empty{ font-size:12px; color: var(--ink-faint); padding:10px 2px; }
+  .kanban-card{ background: var(--bg-elev); border:1px solid var(--card-border); border-radius: var(--radius-sm); padding:10px; margin-bottom:8px; }
+  .kanban-card-client{ font-weight:600; font-size:13px; color: var(--ink); margin-bottom:2px; border:none; background:none; width:100%; padding:1px 0; font-family: var(--font-body); }
+  .kanban-card-name{ font-size:12px; color: var(--ink-dim); margin-bottom:6px; border:none; background:none; width:100%; padding:1px 0; font-family: var(--font-body); }
+  .kanban-card-fyc-row{ display:flex; align-items:center; gap:4px; margin-bottom:8px; }
+  .kanban-card-fyc-row .fyc-prefix{ font-family: var(--font-mono); font-size:13px; color: var(--gold); font-weight:600; }
+  .kanban-card-fyc{ font-family: var(--font-mono); font-size:13px; color: var(--gold); font-weight:600; border:none; background:none; width:100%; padding:1px 0; }
+  .kanban-card-client:focus, .kanban-card-name:focus, .kanban-card-fyc:focus{ outline:none; border-bottom:1px dashed var(--card-border); }
+  .kanban-card-client::placeholder, .kanban-card-name::placeholder, .kanban-card-fyc::placeholder{ color: var(--ink-faint); font-weight:400; }
+  .kanban-card-row{ display:flex; gap:6px; align-items:center; }
+  .kanban-card-row select{
+    flex:1; background: var(--card); border:1px solid var(--card-border); color:var(--ink);
+    border-radius:6px; padding:5px 6px; font-size:11.5px; font-family: var(--font-body);
+  }
+  .kanban-card-del{ background:none; border:none; color: var(--ink-faint); cursor:pointer; font-size:13px; padding:4px; flex-shrink:0; }
+  .kanban-card-del:hover{ color: var(--rose); }
 </style>
 </head>
 <body>
@@ -238,6 +322,7 @@
     <div class="tagline" id="todayLabel">—</div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
+      <button data-view="pipeline">Pipeline</button>
       <button data-view="history">History</button>
     </nav>
   </header>
@@ -274,12 +359,35 @@
       </div>
     </div>
 
+    <!-- Total FYC Opened (Proposed pipeline value) -->
+    <div class="card fyc-opened-card">
+      <div class="fyc-opened-label">Total FYC Opened <span class="fyc-opened-sub">(proposed, awaiting close)</span></div>
+      <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
+    </div>
+
     <!-- Today's 3 Quests -->
     <div class="card">
       <div class="card-head">
         <div class="card-title"><span class="icon">⚔</span>Today's 3 Quests</div>
       </div>
       <div id="questsList"></div>
+    </div>
+
+    <!-- Morning Dailies Focus Timer -->
+    <div class="card timer-card">
+      <div class="timer-label">MORNING DAILIES</div>
+      <div class="timer-display" id="timerDisplay">30:00</div>
+      <div class="timer-flow">check → triage → choose → execute</div>
+      <div class="timer-controls">
+        <button class="timer-btn primary" id="timerStartBtn">Start</button>
+        <button class="timer-btn primary" id="timerPauseBtn" style="display:none;">Pause</button>
+        <button class="timer-btn primary" id="timerResumeBtn" style="display:none;">Resume</button>
+        <button class="timer-btn" id="timerResetBtn" style="display:none;">Reset</button>
+      </div>
+      <div class="timer-banner" id="timerBanner" style="display:none;">
+        <span id="timerBannerText"></span>
+        <button class="banner-dismiss" id="timerBannerDismiss">✕</button>
+      </div>
     </div>
 
     <!-- Work Dailies -->
@@ -324,6 +432,45 @@
     </div>
   </section>
 
+  <!-- ============ PIPELINE ============ -->
+  <section class="view" id="view-pipeline">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">◫</span>Pipeline</div>
+        <button class="edit-btn" id="addCaseToggle" title="Add case">+ Add Case</button>
+      </div>
+      <div class="case-form" id="caseForm" style="display:none;">
+        <div class="edit-row">
+          <div class="edit-field">
+            <label>Client / Prospect</label>
+            <input type="text" id="caseClientInput" placeholder="Name">
+          </div>
+          <div class="edit-field">
+            <label>Case (optional)</label>
+            <input type="text" id="caseNameInput" placeholder="Fill in once you know">
+          </div>
+          <div class="edit-field">
+            <label>FYC $ (optional)</label>
+            <input type="number" id="caseFycInput" min="0" placeholder="Fill in later">
+          </div>
+          <div class="edit-field">
+            <label>Stage</label>
+            <select id="caseStageInput">
+              <option value="prospect">Prospect</option>
+              <option value="open">Open</option>
+              <option value="proposed">Proposed</option>
+              <option value="closed">Closed</option>
+              <option value="inforced">Inforced</option>
+            </select>
+          </div>
+          <button class="save-btn" id="caseSaveBtn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kanban" id="kanbanBoard"></div>
+  </section>
+
   <!-- ============ HISTORY ============ -->
   <section class="view" id="view-history">
     <div class="hist-section">
@@ -364,13 +511,34 @@ const DAILY_TEMPLATE = [
 
 const STAT_DEFS = [
   { key: 'appointments', label: 'Appointments' },
-  { key: 'prospects',    label: 'New Prospects' },
   { key: 'followups',    label: 'Follow-ups' },
-  { key: 'casesSubmitted', label: 'Cases Submitted' },
-  { key: 'casesClosed',  label: 'Cases Closed' },
-  { key: 'fycc',         label: 'FYCC Earned', isMoney: true },
+  { key: 'fycc',         label: 'FYCC Earned', isMoney: true, targetComputed: true },
   { key: 'exercise',     label: 'Exercise Sessions' }
 ];
+
+// Cases move through these stages left to right. "closed" = submitted,
+// awaiting the policy going in force; "inforced" = actually earned —
+// that's when it counts toward the weekly FYCC Earned stat.
+const PIPELINE_STAGES = [
+  { key: 'prospect', label: 'Prospect', sub: 'to meet' },
+  { key: 'open',      label: 'Open',     sub: 'to present' },
+  { key: 'proposed',  label: 'Proposed', sub: 'presented' },
+  { key: 'closed',    label: 'Closed',   sub: 'submitted' },
+  { key: 'inforced',  label: 'Inforced', sub: 'earned' }
+];
+
+// Goal deadline used to pace the weekly FYCC target.
+const GOAL_DEADLINE = new Date(2026, 11, 25); // 25 Dec 2026
+
+const TIMER_DURATION_MS = 30 * 60 * 1000;
+function defaultTimer(){
+  // status: 'idle' | 'running' | 'paused' | 'done'
+  // endAt: epoch ms the countdown reaches 0 (only set while running)
+  // remainingMs: frozen remaining time (used while idle/paused/done)
+  // milestonesFired: which of '20','10','done' have already triggered, so a
+  //   reload or a long-backgrounded tab doesn't re-fire notifications.
+  return { status: 'idle', endAt: null, remainingMs: TIMER_DURATION_MS, milestonesFired: [] };
+}
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function fmtDate(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
@@ -382,13 +550,31 @@ function mondayOf(d){
   date.setDate(date.getDate() + diff);
   return fmtDate(date);
 }
+
+// Weeks remaining between the start of the current week and the goal
+// deadline (25 Dec 2026), floored at 1 so the target never divides by zero
+// or goes negative once the deadline has passed.
+function weeksLeftToDeadline(fromMondayStr){
+  const monday = parseDate(fromMondayStr || mondayOf(new Date()));
+  const msLeft = GOAL_DEADLINE - monday;
+  const weeks = Math.ceil(msLeft / (7 * 24 * 60 * 60 * 1000));
+  return Math.max(1, weeks);
+}
+
+// The weekly FYCC target isn't stored — it's always "gap to goal ÷ weeks
+// left," recalculated live so it stays accurate as currentFYCC changes.
+function weeklyFyccTarget(fromMondayStr){
+  const gap = Math.max(0, state.goal.targetFYCC - state.goal.currentFYCC);
+  return Math.ceil(gap / weeksLeftToDeadline(fromMondayStr));
+}
+
 function emptyStats(){
   const o = {};
   STAT_DEFS.forEach(s => o[s.key] = 0);
   return o;
 }
 function defaultTargets(){
-  return { appointments:8, prospects:5, followups:10, casesSubmitted:3, casesClosed:2, fycc:2000, exercise:3 };
+  return { appointments:8, followups:5, exercise:3 };
 }
 
 function defaultState(){
@@ -403,9 +589,12 @@ function defaultState(){
       date: today,
       checklist: DAILY_TEMPLATE.map(() => false),
       quests: [ {text:'', done:false}, {text:'', done:false}, {text:'', done:false} ],
-      energy: null
+      energy: null,
+      timer: defaultTimer()
     },
-    dayHistory: []
+    dayHistory: [],
+    // Pipeline is a standing list — it doesn't reset daily or weekly.
+    pipeline: { cases: [] }
   };
 }
 
@@ -422,9 +611,10 @@ function loadState(){
       goal: { ...base.goal, ...(parsed.goal||{}) },
       weeklyTargets: { ...base.weeklyTargets, ...(parsed.weeklyTargets||{}) },
       currentWeek: { ...base.currentWeek, ...(parsed.currentWeek||{}), stats: { ...base.currentWeek.stats, ...((parsed.currentWeek||{}).stats||{}) } },
-      today: { ...base.today, ...(parsed.today||{}) },
+      today: { ...base.today, ...(parsed.today||{}), timer: { ...base.today.timer, ...(((parsed.today||{}).timer)||{}) } },
       weekHistory: parsed.weekHistory || [],
-      dayHistory: parsed.dayHistory || []
+      dayHistory: parsed.dayHistory || [],
+      pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] }
     };
   }catch(e){
     console.error('Failed to parse stored state, starting fresh.', e);
@@ -464,7 +654,8 @@ function checkDailyReset(){
       date: todayStr,
       checklist: DAILY_TEMPLATE.map(() => false),
       quests: [ {text:'', done:false}, {text:'', done:false}, {text:'', done:false} ],
-      energy: null
+      energy: null,
+      timer: defaultTimer()
     };
     saveState();
   }
@@ -482,7 +673,7 @@ function checkWeeklyReset(){
         weekStart: w.weekStart,
         weekEnd: fmtDate(end),
         stats: w.stats,
-        targets: { ...state.weeklyTargets }
+        targets: { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) }
       });
     }
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
@@ -512,6 +703,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     document.querySelectorAll('section.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + view).classList.add('active');
     if(view === 'history') renderHistory();
+    if(view === 'pipeline') renderPipeline();
   });
 });
 
@@ -548,6 +740,7 @@ document.getElementById('goalSaveBtn').addEventListener('click', () => {
   state.goal.targetFYCC = Math.max(0, tgt);
   saveState();
   renderGoal();
+  renderStats();
   document.getElementById('goalEditRow').style.display = 'none';
   showToast('Goal updated');
 });
@@ -582,6 +775,9 @@ function renderQuests(){
     input.addEventListener('input', () => {
       state.today.quests[i].text = input.value;
       saveState();
+      // Starting to fill in the Main Quest is our cue that dailies mode is over —
+      // clear the "time's up" banner if it's still sitting there.
+      if(i === 0 && input.value.trim()) dismissTimerBanner();
     });
 
     row.appendChild(tag);
@@ -627,6 +823,194 @@ function renderDailies(){
   document.getElementById('dailyBar').style.width = (total ? (doneCount/total*100) : 0) + '%';
 }
 
+/* ---------- Morning Dailies Focus Timer ----------
+   Design notes:
+   - We store an absolute end timestamp (endAt) rather than counting down
+     via setInterval ticks. That means the displayed time is always
+     (endAt - Date.now()), which stays accurate even if the tab is
+     backgrounded/throttled or the page is refreshed — we just recompute
+     from the wall clock instead of trusting a running counter.
+   - milestonesFired is persisted so a milestone never fires twice, even
+     if the tab was closed and reopened after the threshold passed.
+*/
+const TIMER_MILESTONES = [
+  { key: '20', atMs: 20 * 60 * 1000, title: '20 minutes left', body: 'Stay on the dailies. Scan, triage, move on.', bannerClass: 'milestone-20', bannerText: '20 MIN LEFT' },
+  { key: '10', atMs: 10 * 60 * 1000, title: '10 minutes left', body: 'Wrap up your checks and decide what actually needs your attention today.', bannerClass: 'milestone-10', bannerText: '10 MIN LEFT — START WRAPPING UP' },
+  { key: 'done', atMs: 0, title: 'Dailies complete', body: "Time's up. Start your Main Quest.", bannerClass: 'milestone-done', bannerText: "TIME'S UP — START YOUR MAIN QUEST" }
+];
+
+let timerIntervalId = null;
+let timerBannerAutoHide = null;
+let notifiedTabFocusHookSet = false;
+
+function fmtMMSS(ms){
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${pad(s)}`;
+}
+
+function currentTimerRemaining(){
+  const t = state.today.timer;
+  if(t.status === 'running'){
+    return Math.max(0, t.endAt - Date.now());
+  }
+  return t.remainingMs;
+}
+
+function requestNotifPermissionIfNeeded(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'default'){
+    Notification.requestPermission().catch(() => {});
+  }
+  // If permission is 'denied', we never ask again — the timer and in-app
+  // banners still work fully without it.
+}
+
+function sendNotification(title, body){
+  if(!('Notification' in window)) return;
+  if(Notification.permission !== 'granted') return;
+  try{
+    const n = new Notification(title, { body });
+    // Clicking the notification focuses this tab if it's still open. Browsers
+    // don't allow a notification to reopen a fully closed tab or forcibly
+    // steal focus from another app — this only brings the tab forward within
+    // the browser.
+    n.onclick = () => { window.focus(); n.close(); };
+  }catch(e){ /* notification construction can fail on some mobile browsers — fail silently, banner still shows */ }
+}
+
+function showTimerBanner(milestone){
+  const banner = document.getElementById('timerBanner');
+  const text = document.getElementById('timerBannerText');
+  banner.className = 'timer-banner ' + milestone.bannerClass;
+  text.textContent = milestone.bannerText;
+  banner.style.display = 'flex';
+  clearTimeout(timerBannerAutoHide);
+  if(milestone.key !== 'done'){
+    // 20/10-minute nudges are non-disruptive: they fade on their own.
+    // The final "time's up" banner stays until dismissed or Main Quest is touched.
+    timerBannerAutoHide = setTimeout(() => dismissTimerBanner(), 8000);
+  }
+}
+
+function dismissTimerBanner(){
+  clearTimeout(timerBannerAutoHide);
+  document.getElementById('timerBanner').style.display = 'none';
+}
+
+function fireMilestone(milestone){
+  showTimerBanner(milestone);
+  sendNotification(milestone.title, milestone.body);
+}
+
+function startOrResumeTimer(){
+  const t = state.today.timer;
+  requestNotifPermissionIfNeeded();
+  t.endAt = Date.now() + t.remainingMs;
+  t.status = 'running';
+  saveState();
+  renderTimer();
+  startTimerLoop();
+}
+
+function pauseTimer(){
+  const t = state.today.timer;
+  if(t.status !== 'running') return;
+  t.remainingMs = Math.max(0, t.endAt - Date.now());
+  t.status = 'paused';
+  t.endAt = null;
+  saveState();
+  stopTimerLoop();
+  renderTimer();
+}
+
+function resetTimer(){
+  state.today.timer = defaultTimer();
+  saveState();
+  stopTimerLoop();
+  dismissTimerBanner();
+  renderTimer();
+}
+
+function tickTimer(){
+  const t = state.today.timer;
+  if(t.status !== 'running') { stopTimerLoop(); return; }
+  const remaining = currentTimerRemaining();
+
+  TIMER_MILESTONES.forEach(m => {
+    if(!t.milestonesFired.includes(m.key) && remaining <= m.atMs){
+      t.milestonesFired.push(m.key);
+      fireMilestone(m);
+    }
+  });
+
+  if(remaining <= 0){
+    t.status = 'done';
+    t.remainingMs = 0;
+    t.endAt = null;
+    saveState();
+    stopTimerLoop();
+  }
+  renderTimer();
+}
+
+function startTimerLoop(){
+  stopTimerLoop();
+  timerIntervalId = setInterval(tickTimer, 1000);
+}
+function stopTimerLoop(){
+  if(timerIntervalId){ clearInterval(timerIntervalId); timerIntervalId = null; }
+}
+
+function renderTimer(){
+  const t = state.today.timer;
+  const remaining = currentTimerRemaining();
+  const display = document.getElementById('timerDisplay');
+  display.textContent = fmtMMSS(remaining);
+  display.classList.remove('warn','urgent','done');
+  if(t.status === 'done') display.classList.add('done');
+  else if(remaining <= 10*60*1000) display.classList.add('urgent');
+  else if(remaining <= 20*60*1000) display.classList.add('warn');
+
+  const startBtn = document.getElementById('timerStartBtn');
+  const pauseBtn = document.getElementById('timerPauseBtn');
+  const resumeBtn = document.getElementById('timerResumeBtn');
+  const resetBtn = document.getElementById('timerResetBtn');
+  [startBtn, pauseBtn, resumeBtn, resetBtn].forEach(b => b.style.display = 'none');
+
+  if(t.status === 'idle'){
+    startBtn.style.display = '';
+  } else if(t.status === 'running'){
+    pauseBtn.style.display = '';
+    resetBtn.style.display = '';
+  } else if(t.status === 'paused'){
+    resumeBtn.style.display = '';
+    resetBtn.style.display = '';
+  } else if(t.status === 'done'){
+    resetBtn.style.display = '';
+  }
+}
+
+function initTimer(){
+  // Catch up on anything that happened while the tab was closed/backgrounded:
+  // if we're still "running" per saved state, resume the live tick loop;
+  // a stale end time is handled naturally since remaining is derived from
+  // the wall clock, and tickTimer() will fire any missed milestones at once.
+  if(state.today.timer.status === 'running'){
+    startTimerLoop();
+    tickTimer();
+  } else {
+    renderTimer();
+  }
+}
+
+document.getElementById('timerStartBtn').addEventListener('click', startOrResumeTimer);
+document.getElementById('timerResumeBtn').addEventListener('click', startOrResumeTimer);
+document.getElementById('timerPauseBtn').addEventListener('click', pauseTimer);
+document.getElementById('timerResetBtn').addEventListener('click', resetTimer);
+document.getElementById('timerBannerDismiss').addEventListener('click', dismissTimerBanner);
+
 /* ---------- Weekly Stats ---------- */
 let weekEditMode = false;
 
@@ -635,7 +1019,7 @@ function renderStats(){
   grid.innerHTML = '';
   STAT_DEFS.forEach(def => {
     const current = state.currentWeek.stats[def.key] || 0;
-    const target = state.weeklyTargets[def.key] || 0;
+    const target = def.targetComputed ? weeklyFyccTarget() : (state.weeklyTargets[def.key] || 0);
     const pct = target > 0 ? Math.min(100, Math.round((current/target)*100)) : 0;
 
     const card = document.createElement('div');
@@ -671,6 +1055,13 @@ function renderStats(){
     card.appendChild(nums);
     card.appendChild(track);
 
+    if(def.targetComputed){
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:10px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;';
+      note.textContent = `auto · gap ÷ ${weeksLeftToDeadline()}wk left`;
+      card.appendChild(note);
+    }
+
     if(weekEditMode){
       const controls = document.createElement('div');
       controls.className = 'stat-controls';
@@ -689,23 +1080,28 @@ function renderStats(){
         saveState(); renderStats();
       });
 
-      const targetInput = document.createElement('input');
-      targetInput.type = 'number';
-      targetInput.min = '0';
-      targetInput.value = target;
-      targetInput.style.cssText = 'width:64px;background:var(--card);border:1px solid var(--card-border);color:var(--ink);border-radius:6px;padding:4px 6px;font-family:var(--font-mono);font-size:12px;';
-      targetInput.addEventListener('change', () => {
-        state.weeklyTargets[def.key] = Math.max(0, Number(targetInput.value) || 0);
-        saveState(); renderStats();
-      });
-      const targetLabel = document.createElement('span');
-      targetLabel.style.cssText = 'font-size:10px;color:var(--ink-faint);font-family:var(--font-mono);align-self:center;';
-      targetLabel.textContent = 'target';
-
       controls.appendChild(minus);
       controls.appendChild(plus);
-      controls.appendChild(targetLabel);
-      controls.appendChild(targetInput);
+
+      // The FYCC target is computed automatically (gap to goal ÷ weeks
+      // left), so there's nothing to edit for it — only appointments,
+      // follow-ups, and exercise have a manually-set target.
+      if(!def.targetComputed){
+        const targetInput = document.createElement('input');
+        targetInput.type = 'number';
+        targetInput.min = '0';
+        targetInput.value = target;
+        targetInput.style.cssText = 'width:64px;background:var(--card);border:1px solid var(--card-border);color:var(--ink);border-radius:6px;padding:4px 6px;font-family:var(--font-mono);font-size:12px;';
+        targetInput.addEventListener('change', () => {
+          state.weeklyTargets[def.key] = Math.max(0, Number(targetInput.value) || 0);
+          saveState(); renderStats();
+        });
+        const targetLabel = document.createElement('span');
+        targetLabel.style.cssText = 'font-size:10px;color:var(--ink-faint);font-family:var(--font-mono);align-self:center;';
+        targetLabel.textContent = 'target';
+        controls.appendChild(targetLabel);
+        controls.appendChild(targetInput);
+      }
       card.appendChild(controls);
     }
 
@@ -734,6 +1130,188 @@ document.querySelectorAll('.energy-btn').forEach(btn => {
   });
 });
 
+/* ---------- Pipeline ---------- */
+function genCaseId(){
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function fycOpenedTotal(){
+  // "Opened" = Proposed only — it's the act of presenting that counts, per
+  // how the practice actually tracks it. Prospect/Open cases haven't been
+  // presented yet; Closed/Inforced have moved past "open."
+  return state.pipeline.cases
+    .filter(c => c.stage === 'proposed')
+    .reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+}
+
+function renderFycOpened(){
+  document.getElementById('fycOpenedValue').textContent = '$' + fycOpenedTotal().toLocaleString('en-SG');
+}
+
+function moveCaseStage(caseId, newStage){
+  const c = state.pipeline.cases.find(x => x.id === caseId);
+  if(!c) return;
+  const wasInforced = c.stage === 'inforced';
+  c.stage = newStage;
+  // Only auto-add to this week's FYCC Earned the first time a case reaches
+  // Inforced — that's the point commission is actually confirmed. If it's
+  // toggled back and forth later, it won't double-add; correct manually via
+  // the +/- steppers on the Weekly Stats card if needed.
+  if(newStage === 'inforced' && !wasInforced && !c.inforcedCounted){
+    state.currentWeek.stats.fycc = (state.currentWeek.stats.fycc || 0) + (Number(c.fyc) || 0);
+    c.inforcedCounted = true;
+    showToast(`+$${(Number(c.fyc)||0).toLocaleString('en-SG')} added to this week's FYCC Earned`);
+  }
+  saveState();
+  renderPipeline();
+  renderFycOpened();
+  renderStats();
+}
+
+function deleteCase(caseId){
+  state.pipeline.cases = state.pipeline.cases.filter(x => x.id !== caseId);
+  saveState();
+  renderPipeline();
+  renderFycOpened();
+}
+
+function renderPipeline(){
+  const board = document.getElementById('kanbanBoard');
+  board.innerHTML = '';
+  PIPELINE_STAGES.forEach(stage => {
+    const cases = state.pipeline.cases.filter(c => c.stage === stage.key);
+    const subtotal = cases.reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+
+    const col = document.createElement('div');
+    col.className = 'kanban-col';
+
+    const head = document.createElement('div');
+    head.className = 'kanban-col-head';
+    const title = document.createElement('div');
+    title.className = 'kanban-col-title';
+    title.textContent = `${stage.label} (${stage.sub})`;
+    const sub = document.createElement('div');
+    sub.className = 'kanban-col-sub';
+    sub.textContent = `${cases.length} · $${subtotal.toLocaleString('en-SG')}`;
+    head.appendChild(title);
+    head.appendChild(sub);
+    col.appendChild(head);
+
+    if(cases.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'kanban-empty';
+      empty.textContent = 'Nothing here';
+      col.appendChild(empty);
+    }
+
+    cases.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'kanban-card';
+
+      // All three fields are editable right on the card — useful for
+      // Prospect-stage entries where you've only got a name so far and
+      // will fill in the case/FYC once you know what you're proposing.
+      const client = document.createElement('input');
+      client.className = 'kanban-card-client';
+      client.type = 'text';
+      client.value = c.client || '';
+      client.placeholder = 'Client / prospect name';
+      client.addEventListener('input', () => { c.client = client.value; saveState(); });
+
+      const name = document.createElement('input');
+      name.className = 'kanban-card-name';
+      name.type = 'text';
+      name.value = c.caseName || '';
+      name.placeholder = 'Add case name once known';
+      name.addEventListener('input', () => { c.caseName = name.value; saveState(); });
+
+      const fyc = document.createElement('input');
+      fyc.className = 'kanban-card-fyc';
+      fyc.type = 'number';
+      fyc.min = '0';
+      fyc.value = c.fyc ? c.fyc : '';
+      fyc.placeholder = 'Add FYC $ once known';
+      fyc.addEventListener('input', () => { c.fyc = Math.max(0, Number(fyc.value) || 0); saveState(); });
+      fyc.addEventListener('blur', () => { renderPipeline(); renderFycOpened(); });
+
+      const fycRow = document.createElement('div');
+      fycRow.className = 'kanban-card-fyc-row';
+      const fycPrefix = document.createElement('span');
+      fycPrefix.className = 'fyc-prefix';
+      fycPrefix.textContent = '$';
+      fycRow.appendChild(fycPrefix);
+      fycRow.appendChild(fyc);
+
+      const row = document.createElement('div');
+      row.className = 'kanban-card-row';
+
+      const select = document.createElement('select');
+      PIPELINE_STAGES.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.key;
+        opt.textContent = s.label;
+        if(s.key === c.stage) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', () => moveCaseStage(c.id, select.value));
+
+      const del = document.createElement('button');
+      del.className = 'kanban-card-del';
+      del.textContent = '✕';
+      del.title = 'Remove case';
+      del.addEventListener('click', () => {
+        if(confirm(`Remove "${c.caseName || 'this case'}" for ${c.client || 'this client'}?`)) deleteCase(c.id);
+      });
+
+      row.appendChild(select);
+      row.appendChild(del);
+
+      card.appendChild(client);
+      card.appendChild(name);
+      card.appendChild(fycRow);
+      card.appendChild(row);
+      col.appendChild(card);
+    });
+
+    board.appendChild(col);
+  });
+}
+
+document.getElementById('addCaseToggle').addEventListener('click', () => {
+  const form = document.getElementById('caseForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('caseSaveBtn').addEventListener('click', () => {
+  const client = document.getElementById('caseClientInput').value.trim();
+  const caseName = document.getElementById('caseNameInput').value.trim();
+  const fyc = Math.max(0, Number(document.getElementById('caseFycInput').value) || 0);
+  const stage = document.getElementById('caseStageInput').value;
+
+  if(!client && !caseName){
+    showToast('Add a client or case name first');
+    return;
+  }
+
+  state.pipeline.cases.unshift({
+    id: genCaseId(),
+    client, caseName, fyc, stage,
+    inforcedCounted: false,
+    createdAt: fmtDate(new Date())
+  });
+  saveState();
+
+  document.getElementById('caseClientInput').value = '';
+  document.getElementById('caseNameInput').value = '';
+  document.getElementById('caseFycInput').value = '';
+  document.getElementById('caseStageInput').value = 'prospect';
+  document.getElementById('caseForm').style.display = 'none';
+
+  renderPipeline();
+  renderFycOpened();
+  showToast('Case added');
+});
+
 /* ---------- History ---------- */
 function renderHistory(){
   const dayWrap = document.getElementById('dayHistoryWrap');
@@ -759,13 +1337,13 @@ function renderHistory(){
     let rows = state.weekHistory.slice(0, 52).map(w => `
       <tr>
         <td>${w.weekStart} – ${w.weekEnd}</td>
-        <td>${w.stats.appointments}/${w.targets.appointments}</td>
-        <td>${w.stats.casesClosed}/${w.targets.casesClosed}</td>
+        <td>${w.stats.appointments||0}/${w.targets.appointments||0}</td>
+        <td>${w.stats.followups||0}/${w.targets.followups||0}</td>
         <td>$${(w.stats.fycc||0).toLocaleString('en-SG')}</td>
-        <td>${w.stats.exercise}</td>
+        <td>${w.stats.exercise||0}</td>
       </tr>`).join('');
     weekWrap.innerHTML = `<table class="hist-table">
-      <thead><tr><th>Week</th><th>Appts</th><th>Closed</th><th>FYCC</th><th>Exercise</th></tr></thead>
+      <thead><tr><th>Week</th><th>Appts</th><th>Follow-ups</th><th>FYCC</th><th>Exercise</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
 }
@@ -799,9 +1377,12 @@ document.getElementById('importFile').addEventListener('change', (e) => {
       }
       state = parsed;
       saveState();
+      stopTimerLoop();
+      dismissTimerBanner();
       checkDailyReset();
       checkWeeklyReset();
       renderAll();
+      initTimer();
       showToast('Data imported');
     }catch(err){
       console.error(err);
@@ -816,14 +1397,18 @@ document.getElementById('importFile').addEventListener('change', (e) => {
 function renderAll(){
   renderHeader();
   renderGoal();
+  renderFycOpened();
   renderQuests();
   renderDailies();
+  renderTimer();
   renderStats();
   renderEnergy();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
+  if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
 }
 
 renderAll();
+initTimer();
 
 // Catch the case where the tab is left open across midnight / a Monday rollover.
 setInterval(() => {
@@ -831,7 +1416,13 @@ setInterval(() => {
   const beforeWeek = state.currentWeek.weekStart;
   checkDailyReset();
   checkWeeklyReset();
-  if(state.today.date !== beforeDay || state.currentWeek.weekStart !== beforeWeek){
+  if(state.today.date !== beforeDay){
+    // A new day means the timer was reset too — restart its lifecycle cleanly.
+    stopTimerLoop();
+    dismissTimerBanner();
+    renderAll();
+    initTimer();
+  } else if(state.currentWeek.weekStart !== beforeWeek){
     renderAll();
   }
 }, 60 * 1000);
