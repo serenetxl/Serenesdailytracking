@@ -9,20 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #10121a;
-    --bg-elev: #171a24;
-    --card: #1b1f2b;
-    --card-border: #2a2f3f;
-    --ink: #e9e8ef;
-    --ink-dim: #a4a7b8;
-    --ink-faint: #6b6e80;
-    --gold: #cba35c;
-    --gold-soft: rgba(203,163,92,0.14);
-    --teal: #6fc7b8;
-    --teal-soft: rgba(111,199,184,0.14);
-    --rose: #d98a8a;
-    --rose-soft: rgba(217,138,138,0.14);
-    --track: #262b3a;
+    --bg: #faf8f4;
+    --bg-elev: #f4f1fb;
+    --card: #ffffff;
+    --card-border: #ece8f6;
+    --ink: #35304a;
+    --ink-dim: #726d88;
+    --ink-faint: #aaa5bd;
+    --gold: #dd8f5c;
+    --gold-soft: rgba(221,143,92,0.15);
+    --teal: #46a384;
+    --teal-soft: rgba(70,163,132,0.14);
+    --rose: #d8749a;
+    --rose-soft: rgba(216,116,154,0.14);
+    --track: #efebf9;
     --radius: 14px;
     --radius-sm: 10px;
     --font-display: 'Space Grotesk', sans-serif;
@@ -34,8 +34,8 @@
   html, body{ margin:0; padding:0; }
   body{
     background:
-      radial-gradient(circle at 15% -10%, rgba(203,163,92,0.08), transparent 45%),
-      radial-gradient(circle at 100% 10%, rgba(111,199,184,0.06), transparent 40%),
+      radial-gradient(circle at 15% -10%, rgba(221,143,92,0.09), transparent 45%),
+      radial-gradient(circle at 100% 10%, rgba(70,163,132,0.07), transparent 40%),
       var(--bg);
     color: var(--ink);
     font-family: var(--font-body);
@@ -54,7 +54,7 @@
     letter-spacing: 0.02em;
     display:flex; align-items:center; gap:10px;
   }
-  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 8px rgba(221,143,92,0.5); }
   .tagline{ color: var(--ink-faint); font-size: 12.5px; margin-top:4px; letter-spacing:0.04em; text-transform:uppercase; font-family: var(--font-mono); }
 
   nav.tabs{ display:flex; gap:6px; margin-top:20px; }
@@ -63,7 +63,7 @@
     padding:7px 14px; border-radius: 999px; font-family: var(--font-body); font-size:13px; font-weight:600;
     cursor:pointer; transition: all .15s ease;
   }
-  nav.tabs button.active{ background: var(--gold-soft); color: var(--gold); border-color: rgba(203,163,92,0.4); }
+  nav.tabs button.active{ background: var(--gold-soft); color: var(--gold); border-color: rgba(221,143,92,0.4); }
   nav.tabs button:hover:not(.active){ color: var(--ink); border-color:#3a3f52; }
 
   section.view{ display:none; }
@@ -76,15 +76,17 @@
     border-radius: var(--radius);
     padding: 20px;
     margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(53,48,74,0.05);
   }
   .card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 14px; }
   .card-title{ font-family: var(--font-display); font-weight:600; font-size:15px; letter-spacing:0.01em; display:flex; align-items:center; gap:8px; }
   .card-title .icon{ opacity:0.85; }
   .edit-btn{
-    background:none; border:none; color:var(--ink-faint); cursor:pointer; padding:4px; border-radius:6px;
-    display:flex; align-items:center; justify-content:center; transition: color .15s;
+    background: var(--gold-soft); border:1px solid rgba(221,143,92,0.4); color: var(--gold);
+    cursor:pointer; padding:5px 11px; border-radius:8px; font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:5px; transition: all .15s; font-family: var(--font-body);
   }
-  .edit-btn:hover{ color: var(--gold); }
+  .edit-btn:hover{ background: rgba(221,143,92,0.26); }
 
   /* Goal / IDA card */
   .goal-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; }
@@ -101,8 +103,8 @@
   }
   .bar-fill{
     height:100%; border-radius:999px;
-    background: linear-gradient(90deg, #a9803f, var(--gold));
-    box-shadow: 0 0 12px rgba(203,163,92,0.45);
+    background: linear-gradient(90deg, #f2c39e, var(--gold));
+    box-shadow: 0 0 8px rgba(221,143,92,0.28);
     transition: width .5s cubic-bezier(.2,.8,.2,1);
     position: relative;
   }
@@ -121,11 +123,11 @@
   }
   .edit-field input:focus{ outline:none; border-color: var(--gold); }
   .save-btn{
-    background: var(--gold-soft); color: var(--gold); border:1px solid rgba(203,163,92,0.4);
+    background: var(--gold-soft); color: var(--gold); border:1px solid rgba(221,143,92,0.4);
     border-radius:8px; padding:7px 14px; font-weight:600; font-size:13px; cursor:pointer; font-family: var(--font-body);
     align-self:flex-end;
   }
-  .save-btn:hover{ background: rgba(203,163,92,0.24); }
+  .save-btn:hover{ background: rgba(221,143,92,0.26); }
 
   /* Quests */
   .quest{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--card-border); }
@@ -190,9 +192,9 @@
     cursor:pointer; transition: all .15s ease; text-align:center;
   }
   .energy-btn .em{ display:block; font-size:20px; margin-bottom:4px; }
-  .energy-btn.sel-low{ background: var(--rose-soft); border-color: rgba(217,138,138,0.5); color:#e8b1b1; }
-  .energy-btn.sel-okay{ background: var(--gold-soft); border-color: rgba(203,163,92,0.5); color: var(--gold); }
-  .energy-btn.sel-good{ background: var(--teal-soft); border-color: rgba(111,199,184,0.5); color: var(--teal); }
+  .energy-btn.sel-low{ background: var(--rose-soft); border-color: rgba(216,116,154,0.5); color: var(--rose); }
+  .energy-btn.sel-okay{ background: var(--gold-soft); border-color: rgba(221,143,92,0.5); color: var(--gold); }
+  .energy-btn.sel-good{ background: var(--teal-soft); border-color: rgba(70,163,132,0.5); color: var(--teal); }
 
   /* Footer / data controls */
   .data-actions{ display:flex; gap:10px; flex-wrap:wrap; }
@@ -212,7 +214,7 @@
   .hist-table td{ padding:10px 10px; border-bottom:1px solid var(--card-border); color: var(--ink-dim); }
   .hist-table tr:last-child td{ border-bottom:none; }
   .pill{ display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:600; font-family: var(--font-mono); }
-  .pill.low{ background: var(--rose-soft); color:#e8b1b1; }
+  .pill.low{ background: var(--rose-soft); color: var(--rose); }
   .pill.okay{ background: var(--gold-soft); color: var(--gold); }
   .pill.good{ background: var(--teal-soft); color: var(--teal); }
   .empty-note{ color: var(--ink-faint); font-size:13px; padding:14px 4px; }
@@ -247,7 +249,7 @@
     <div class="card">
       <div class="card-head">
         <div class="card-title"><span class="icon">◆</span>2026 Goal: Clear IDA</div>
-        <button class="edit-btn" id="goalEditToggle" title="Edit">✎</button>
+        <button class="edit-btn" id="goalEditToggle" title="Edit">✎ Edit</button>
       </div>
       <div class="goal-row">
         <div class="goal-label">FYCC Progress</div>
@@ -294,7 +296,7 @@
     <div class="card">
       <div class="card-head">
         <div class="card-title"><span class="icon">◈</span>Weekly Stats</div>
-        <button class="edit-btn" id="weekEditToggle" title="Edit targets">✎</button>
+        <button class="edit-btn" id="weekEditToggle" title="Edit targets">✎ Edit</button>
       </div>
       <div class="stat-grid" id="statGrid"></div>
     </div>
@@ -565,7 +567,7 @@ function renderQuests(){
 
     const check = document.createElement('div');
     check.className = 'quest-check' + (q.done ? ' done' : '');
-    check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="#10121a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     check.addEventListener('click', () => {
       state.today.quests[i].done = !state.today.quests[i].done;
       saveState();
@@ -600,7 +602,7 @@ function renderDailies(){
 
     const check = document.createElement('div');
     check.className = 'daily-check' + (done ? ' done' : '');
-    check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="#10121a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
     const label = document.createElement('div');
     label.className = 'daily-text';
