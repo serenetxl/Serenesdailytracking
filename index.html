@@ -169,7 +169,7 @@
   .quest-action-btn{
     background: var(--bg-elev); border:1px solid var(--card-border); color: var(--ink-dim);
     padding:4px 11px; border-radius:999px; font-size:11.5px; font-weight:600; cursor:pointer;
-    font-family: var(--font-body); transition: all .15s ease;
+    font-family: var(--font-body); transition: all .15s ease; touch-action: manipulation;
   }
   .quest-action-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
   .quest-action-btn.start{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
@@ -928,6 +928,23 @@ function completeQuest(i){
   renderMainQuestPrompt();
 }
 
+function undoCompleteQuest(i){
+  const q = state.today.quests[i];
+  if(q.status !== 'completed') return;
+  // We know whether it had been started before it was marked complete
+  // (startedAt is still on the record), so undo restores that exact
+  // in-between state rather than always dropping back to Not Started.
+  q.status = q.startedAt ? 'in_progress' : 'not_started';
+  q.completedDate = null;
+  const todayStr = fmtDate(new Date());
+  const logIdx = state.questLog.findIndex(e => e.id === q.id && e.status === 'completed' && e.resolvedDate === todayStr);
+  if(logIdx !== -1) state.questLog.splice(logIdx, 1);
+  saveState();
+  renderQuests();
+  renderMainQuestPrompt();
+  showToast('Undone');
+}
+
 function renderQuests(){
   const wrap = document.getElementById('questsList');
   wrap.innerHTML = '';
@@ -985,13 +1002,11 @@ function renderQuests(){
       pill.textContent = q.status === 'not_started' ? 'Not Started' : q.status === 'in_progress' ? 'In Progress' : 'Completed';
       meta.appendChild(pill);
 
-      if(q.status === 'not_started'){
-        const startBtn = document.createElement('button');
-        startBtn.className = 'quest-action-btn start';
-        startBtn.textContent = '▶ Start';
-        startBtn.addEventListener('click', () => startQuest(i));
-        meta.appendChild(startBtn);
-      }
+      // Done is rendered before Start and Start comes last: when Start is
+      // tapped and disappears, nothing shifts into its place (nothing
+      // follows it), so a slightly-delayed second tap/click — common on
+      // mobile — can't accidentally land on a button that just slid under
+      // your finger.
       if(q.status === 'not_started' || q.status === 'in_progress'){
         const doneBtn = document.createElement('button');
         doneBtn.className = 'quest-action-btn done-btn';
@@ -999,11 +1014,26 @@ function renderQuests(){
         doneBtn.addEventListener('click', () => completeQuest(i));
         meta.appendChild(doneBtn);
       }
+      if(q.status === 'not_started'){
+        const startBtn = document.createElement('button');
+        startBtn.className = 'quest-action-btn start';
+        startBtn.textContent = '▶ Start';
+        startBtn.addEventListener('click', () => startQuest(i));
+        meta.appendChild(startBtn);
+      }
       if(q.status === 'in_progress' && q.startedAt){
         const started = document.createElement('span');
         started.className = 'quest-started-at';
         started.textContent = 'Started ' + new Date(q.startedAt).toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit'});
         meta.appendChild(started);
+      }
+      if(q.status === 'completed'){
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'quest-action-btn';
+        undoBtn.textContent = '↺ Undo';
+        undoBtn.title = 'Marked complete by mistake?';
+        undoBtn.addEventListener('click', () => undoCompleteQuest(i));
+        meta.appendChild(undoBtn);
       }
       row.appendChild(meta);
     }
