@@ -130,13 +130,18 @@
   .save-btn:hover{ background: rgba(221,143,92,0.26); }
 
   /* Quests */
-  .quest{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--card-border); }
+  .quest{ padding:10px 0; border-bottom:1px solid var(--card-border); }
   .quest:last-child{ border-bottom:none; }
+  .quest-top{ display:flex; align-items:center; gap:12px; }
   .quest-tag{
     font-family: var(--font-mono); font-size:10px; color: var(--ink-faint); width:64px; flex-shrink:0;
     text-transform:uppercase; letter-spacing:0.06em;
   }
   .quest.main .quest-tag{ color: var(--gold); }
+  .quest-lock{
+    font-family: var(--font-mono); font-size:9.5px; color: var(--rose); background: var(--rose-soft);
+    padding:2px 6px; border-radius:999px; letter-spacing:0.03em; flex-shrink:0; white-space:nowrap;
+  }
   .quest-check{
     width:20px; height:20px; border-radius:6px; border:1.5px solid var(--card-border);
     display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
@@ -151,7 +156,70 @@
   }
   .quest-input:focus{ outline:none; }
   .quest-input::placeholder{ color: var(--ink-faint); }
+  .quest-input:disabled{ color: var(--ink); opacity:1; cursor:default; }
   .quest.done .quest-input{ color: var(--ink-faint); text-decoration: line-through; }
+  .quest-meta{ display:flex; align-items:center; gap:8px; margin-top:6px; padding-left:32px; flex-wrap:wrap; }
+  .quest-status-pill{
+    font-family: var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:999px; letter-spacing:0.02em;
+  }
+  .quest-status-pill.not_started{ background: var(--track); color: var(--ink-faint); }
+  .quest-status-pill.in_progress{ background: var(--gold-soft); color: var(--gold); }
+  .quest-status-pill.completed{ background: var(--teal-soft); color: var(--teal); }
+  .quest-started-at{ font-family: var(--font-mono); font-size:10.5px; color: var(--ink-faint); }
+  .quest-action-btn{
+    background: var(--bg-elev); border:1px solid var(--card-border); color: var(--ink-dim);
+    padding:4px 11px; border-radius:999px; font-size:11.5px; font-weight:600; cursor:pointer;
+    font-family: var(--font-body); transition: all .15s ease;
+  }
+  .quest-action-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .quest-action-btn.start{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
+  .quest-action-btn.done-btn{ background: var(--teal-soft); border-color: rgba(70,163,132,0.4); color: var(--teal); }
+
+  /* Unfinished-from-yesterday */
+  .unfinished-item{ padding:12px 0; border-bottom:1px solid var(--card-border); }
+  .unfinished-item:last-child{ border-bottom:none; }
+  .unfinished-top{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .unfinished-tag{
+    font-family: var(--font-mono); font-size:10px; color: var(--ink-faint); text-transform:uppercase;
+    letter-spacing:0.06em; background: var(--track); padding:2px 7px; border-radius:6px; flex-shrink:0;
+  }
+  .unfinished-text{ font-size:14px; color: var(--ink); }
+  .unfinished-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .unfinished-btn{
+    background: var(--bg-elev); border:1px solid var(--card-border); color: var(--ink-dim);
+    padding:6px 13px; border-radius:8px; font-size:12.5px; font-weight:600; cursor:pointer;
+    font-family: var(--font-body); transition: all .15s ease;
+  }
+  .unfinished-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .unfinished-btn.continue{ background: var(--teal-soft); border-color: rgba(70,163,132,0.4); color: var(--teal); }
+  .unfinished-btn.reschedule{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
+  .unfinished-btn.cancel{ background: var(--rose-soft); border-color: rgba(216,116,154,0.4); color: var(--rose); }
+
+  .reason-panel{ margin-top:10px; padding:12px; background: var(--bg-elev); border-radius: var(--radius-sm); border:1px solid var(--card-border); }
+  .reason-panel input[type=date]{
+    background: var(--card); border:1px solid var(--card-border); color:var(--ink); border-radius:8px;
+    padding:6px 9px; font-family: var(--font-body); font-size:13px; margin-bottom:10px;
+  }
+  .reason-chips{ display:flex; flex-wrap:wrap; gap:7px; }
+  .reason-chip{
+    background: var(--card); border:1px solid var(--card-border); color: var(--ink-dim);
+    padding:6px 12px; border-radius:999px; font-size:12px; cursor:pointer; font-family: var(--font-body);
+    transition: all .15s ease;
+  }
+  .reason-chip:hover{ border-color: var(--gold); color: var(--gold); }
+  .reason-other-row{ display:flex; gap:8px; margin-top:8px; }
+  .reason-other-row input{
+    flex:1; background: var(--card); border:1px solid var(--card-border); color:var(--ink); border-radius:8px;
+    padding:6px 9px; font-family: var(--font-body); font-size:12.5px;
+  }
+
+  /* Prominent Start Main Quest block, shown when timer hits 0:00 */
+  .main-quest-prompt{
+    margin-top:16px; padding:14px; border-radius: var(--radius-sm); background: var(--teal-soft);
+    border:1px solid rgba(70,163,132,0.3); text-align:left;
+  }
+  .mqp-label{ font-family: var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color: var(--teal); }
+  .mqp-text{ font-family: var(--font-display); font-size:15px; font-weight:600; color: var(--ink); margin:5px 0 10px; }
 
   /* Dailies */
   .daily-header-row{ display:flex; align-items:center; justify-content:space-between; }
@@ -218,6 +286,13 @@
   .pill.okay{ background: var(--gold-soft); color: var(--gold); }
   .pill.good{ background: var(--teal-soft); color: var(--teal); }
   .empty-note{ color: var(--ink-faint); font-size:13px; padding:14px 4px; }
+
+  /* Quest insights */
+  .insight-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:10px; }
+  .insight-card{ background: var(--card); border:1px solid var(--card-border); border-radius: var(--radius-sm); padding:12px; box-shadow: 0 2px 10px rgba(53,48,74,0.05); }
+  .insight-label{ font-family: var(--font-mono); font-size:10.5px; color: var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; }
+  .insight-value{ font-family: var(--font-display); font-size:19px; font-weight:700; color: var(--ink); }
+  .insight-reason{ font-size:12.5px; color: var(--ink-dim); padding:2px 4px; }
 
   .toast{
     position: fixed; bottom: 22px; left:50%; transform: translateX(-50%) translateY(10px);
@@ -365,6 +440,14 @@
       <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
     </div>
 
+    <!-- Unfinished from yesterday (only renders when there's something pending) -->
+    <div class="card" id="unfinishedCard" style="display:none;">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">↺</span>Unfinished From Yesterday</div>
+      </div>
+      <div id="unfinishedList"></div>
+    </div>
+
     <!-- Today's 3 Quests -->
     <div class="card">
       <div class="card-head">
@@ -387,6 +470,11 @@
       <div class="timer-banner" id="timerBanner" style="display:none;">
         <span id="timerBannerText"></span>
         <button class="banner-dismiss" id="timerBannerDismiss">✕</button>
+      </div>
+      <div class="main-quest-prompt" id="mainQuestPrompt" style="display:none;">
+        <div class="mqp-label">Your Main Quest</div>
+        <div class="mqp-text" id="mqpText"></div>
+        <button class="timer-btn primary" id="startMainQuestBtn">START MAIN QUEST</button>
       </div>
     </div>
 
@@ -474,6 +562,10 @@
   <!-- ============ HISTORY ============ -->
   <section class="view" id="view-history">
     <div class="hist-section">
+      <div class="hist-title">This week · quests</div>
+      <div id="questInsightsWrap"></div>
+    </div>
+    <div class="hist-section">
       <div class="hist-title">Daily history</div>
       <div id="dayHistoryWrap"></div>
     </div>
@@ -529,6 +621,36 @@ const PIPELINE_STAGES = [
 
 // Goal deadline used to pace the weekly FYCC target.
 const GOAL_DEADLINE = new Date(2026, 11, 25); // 25 Dec 2026
+
+// Reasons offered when rescheduling or cancelling a quest — kept neutral,
+// no "failed"/"missed" language anywhere.
+const QUEST_REASONS = [
+  { key: 'time', label: 'Ran out of time' },
+  { key: 'energy', label: 'Energy was too low' },
+  { key: 'blocked', label: 'Blocked / waiting on someone' },
+  { key: 'priority', label: 'Priority genuinely changed' },
+  { key: 'larger', label: 'Task was larger than expected' },
+  { key: 'unnecessary', label: 'No longer necessary' },
+  { key: 'other', label: 'Other' }
+];
+
+function genId(prefix){
+  return (prefix||'x') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// A blank quest slot. role is fixed at creation ('main' for slot 0, 'side'
+// otherwise) and doesn't change even if the quest later moves slots via
+// Continue — it's a historical tag, not a live position marker.
+function emptyQuest(role){
+  return {
+    id: null, text: '', role, status: 'not_started',
+    createdDate: null, carriedDates: [], completedDate: null,
+    startedAt: null, reasonCode: null, reasonNote: null, rescheduledTo: null
+  };
+}
+function defaultQuests(){
+  return [ emptyQuest('main'), emptyQuest('side'), emptyQuest('side') ];
+}
 
 const TIMER_DURATION_MS = 30 * 60 * 1000;
 function defaultTimer(){
@@ -588,13 +710,19 @@ function defaultState(){
     today: {
       date: today,
       checklist: DAILY_TEMPLATE.map(() => false),
-      quests: [ {text:'', done:false}, {text:'', done:false}, {text:'', done:false} ],
+      quests: defaultQuests(),
       energy: null,
       timer: defaultTimer()
     },
     dayHistory: [],
     // Pipeline is a standing list — it doesn't reset daily or weekly.
-    pipeline: { cases: [] }
+    pipeline: { cases: [] },
+    // Quests carried from a prior day that are still not_started/in_progress,
+    // awaiting a Continue/Reschedule/Cancel decision.
+    pendingCarryover: [],
+    // Append-only log of quests that reached a terminal state (completed,
+    // rescheduled, cancelled) — the source of truth for weekly quest insights.
+    questLog: []
   };
 }
 
@@ -614,7 +742,9 @@ function loadState(){
       today: { ...base.today, ...(parsed.today||{}), timer: { ...base.today.timer, ...(((parsed.today||{}).timer)||{}) } },
       weekHistory: parsed.weekHistory || [],
       dayHistory: parsed.dayHistory || [],
-      pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] }
+      pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
+      pendingCarryover: parsed.pendingCarryover || [],
+      questLog: parsed.questLog || []
     };
   }catch(e){
     console.error('Failed to parse stored state, starting fresh.', e);
@@ -640,7 +770,7 @@ function checkDailyReset(){
     // archive the day that just ended, but only if it had any activity
     const t = state.today;
     const checklistDone = t.checklist.filter(Boolean).length;
-    const questsDone = t.quests.filter(q => q.done && q.text.trim()).length;
+    const questsDone = t.quests.filter(q => q.status === 'completed' && q.text.trim()).length;
     const hadActivity = checklistDone > 0 || questsDone > 0 || t.energy || t.quests.some(q => q.text.trim());
     if(hadActivity){
       state.dayHistory.unshift({
@@ -650,10 +780,19 @@ function checkDailyReset(){
         energy: t.energy
       });
     }
+    // Quests that were never resolved (not_started/in_progress, with real
+    // text) don't just vanish — they go into pendingCarryover so tomorrow
+    // morning offers Continue / Reschedule / Cancel. We never auto-delete
+    // and never auto-add extra slots.
+    const unresolved = t.quests.filter(q => q.text.trim() && (q.status === 'not_started' || q.status === 'in_progress'));
+    if(unresolved.length){
+      const existingIds = new Set(state.pendingCarryover.map(q => q.id));
+      unresolved.forEach(q => { if(!existingIds.has(q.id)) state.pendingCarryover.push(q); });
+    }
     state.today = {
       date: todayStr,
       checklist: DAILY_TEMPLATE.map(() => false),
-      quests: [ {text:'', done:false}, {text:'', done:false}, {text:'', done:false} ],
+      quests: defaultQuests(),
       energy: null,
       timer: defaultTimer()
     };
@@ -746,44 +885,332 @@ document.getElementById('goalSaveBtn').addEventListener('click', () => {
 });
 
 /* ---------- Quests ---------- */
+/* ---------- Quests ----------
+   Quest states: not_started -> in_progress -> completed (terminal),
+   or (from pendingCarryover only) -> rescheduled / cancelled (terminal).
+   The Main Quest (slot 0) locks for editing once the Morning Dailies timer
+   hits 0:00 — derived live from timer status, not a separate flag, so
+   resetting the timer naturally re-opens editing too.
+*/
+function isMainLocked(){
+  return state.today.timer.status === 'done';
+}
+
+function logQuestEvent(q, status, extra){
+  // Appends a terminal-state record for weekly insights. Only called once
+  // per resolution — completing, rescheduling, or cancelling a quest.
+  state.questLog.push({
+    id: q.id, text: q.text, role: q.role,
+    createdDate: q.createdDate, resolvedDate: fmtDate(new Date()),
+    status, ...extra
+  });
+}
+
+function startQuest(i){
+  const q = state.today.quests[i];
+  if(!q.text.trim() || q.status !== 'not_started') return;
+  q.status = 'in_progress';
+  q.startedAt = Date.now();
+  saveState();
+  renderQuests();
+  renderMainQuestPrompt();
+}
+
+function completeQuest(i){
+  const q = state.today.quests[i];
+  if(!q.text.trim() || q.status === 'completed') return;
+  q.status = 'completed';
+  q.completedDate = fmtDate(new Date());
+  if(!q.id) q.id = genId('q');
+  logQuestEvent(q, 'completed');
+  saveState();
+  renderQuests();
+  renderMainQuestPrompt();
+}
+
 function renderQuests(){
   const wrap = document.getElementById('questsList');
   wrap.innerHTML = '';
   const labels = ['Main Quest', 'Quest 2', 'Quest 3'];
+  const mainLocked = isMainLocked();
+
   state.today.quests.forEach((q, i) => {
+    const locked = i === 0 && mainLocked;
     const row = document.createElement('div');
-    row.className = 'quest' + (i === 0 ? ' main' : '') + (q.done ? ' done' : '');
+    row.className = 'quest' + (i === 0 ? ' main' : '') + (q.status === 'completed' ? ' done' : '');
+
+    const top = document.createElement('div');
+    top.className = 'quest-top';
 
     const tag = document.createElement('div');
     tag.className = 'quest-tag';
     tag.textContent = labels[i];
+    top.appendChild(tag);
 
-    const check = document.createElement('div');
-    check.className = 'quest-check' + (q.done ? ' done' : '');
-    check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    check.addEventListener('click', () => {
-      state.today.quests[i].done = !state.today.quests[i].done;
-      saveState();
-      renderQuests();
-    });
+    if(locked){
+      const lock = document.createElement('div');
+      lock.className = 'quest-lock';
+      lock.textContent = '🔒 MAIN QUEST LOCKED';
+      top.appendChild(lock);
+    }
 
     const input = document.createElement('input');
     input.className = 'quest-input';
     input.type = 'text';
     input.placeholder = i === 0 ? "Today's single most important outcome…" : 'Optional…';
     input.value = q.text;
+    input.disabled = locked;
     input.addEventListener('input', () => {
-      state.today.quests[i].text = input.value;
+      // First time this slot goes from empty to having text, it becomes a
+      // real quest with its own identity and creation date.
+      if(!q.id && input.value.trim()){
+        q.id = genId('q');
+        q.createdDate = fmtDate(new Date());
+      }
+      q.text = input.value;
       saveState();
       // Starting to fill in the Main Quest is our cue that dailies mode is over —
       // clear the "time's up" banner if it's still sitting there.
       if(i === 0 && input.value.trim()) dismissTimerBanner();
     });
+    top.appendChild(input);
+    row.appendChild(top);
 
-    row.appendChild(tag);
-    row.appendChild(check);
-    row.appendChild(input);
+    if(q.text.trim()){
+      const meta = document.createElement('div');
+      meta.className = 'quest-meta';
+
+      const pill = document.createElement('span');
+      pill.className = 'quest-status-pill ' + q.status;
+      pill.textContent = q.status === 'not_started' ? 'Not Started' : q.status === 'in_progress' ? 'In Progress' : 'Completed';
+      meta.appendChild(pill);
+
+      if(q.status === 'not_started'){
+        const startBtn = document.createElement('button');
+        startBtn.className = 'quest-action-btn start';
+        startBtn.textContent = '▶ Start';
+        startBtn.addEventListener('click', () => startQuest(i));
+        meta.appendChild(startBtn);
+      }
+      if(q.status === 'not_started' || q.status === 'in_progress'){
+        const doneBtn = document.createElement('button');
+        doneBtn.className = 'quest-action-btn done-btn';
+        doneBtn.textContent = '✓ Done';
+        doneBtn.addEventListener('click', () => completeQuest(i));
+        meta.appendChild(doneBtn);
+      }
+      if(q.status === 'in_progress' && q.startedAt){
+        const started = document.createElement('span');
+        started.className = 'quest-started-at';
+        started.textContent = 'Started ' + new Date(q.startedAt).toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit'});
+        meta.appendChild(started);
+      }
+      row.appendChild(meta);
+    }
+
     wrap.appendChild(row);
+  });
+}
+
+/* ---------- Prominent "Start Main Quest" block ----------
+   Shows inside the timer card once the Morning Dailies timer hits 0:00,
+   as long as the Main Quest has text and hasn't been started yet.
+*/
+function renderMainQuestPrompt(){
+  const block = document.getElementById('mainQuestPrompt');
+  const main = state.today.quests[0];
+  const shouldShow = state.today.timer.status === 'done' && main.text.trim() && main.status === 'not_started';
+  if(!shouldShow){ block.style.display = 'none'; return; }
+  document.getElementById('mqpText').textContent = main.text;
+  block.style.display = 'block';
+}
+document.getElementById('startMainQuestBtn').addEventListener('click', () => {
+  startQuest(0);
+  dismissTimerBanner();
+});
+
+/* ---------- Unfinished From Yesterday ---------- */
+let reasonPanelOpenFor = null; // {id, action: 'reschedule'|'cancel'}
+
+function tomorrowStr(){
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  return fmtDate(d);
+}
+
+function findEmptySlotIndex(){
+  // Prefer the side-quest slots so a carried-over item doesn't accidentally
+  // claim the Main Quest slot just because it happened to be empty first.
+  for(const i of [1, 2, 0]){
+    if(!state.today.quests[i].text.trim()) return i;
+  }
+  return -1;
+}
+
+function continueQuest(id){
+  const idx = state.pendingCarryover.findIndex(q => q.id === id);
+  if(idx === -1) return;
+  const slot = findEmptySlotIndex();
+  if(slot === -1){
+    showToast('All 3 quest slots are full today');
+    return;
+  }
+  const q = state.pendingCarryover[idx];
+  q.carriedDates.push(fmtDate(new Date()));
+  state.today.quests[slot] = q;
+  state.pendingCarryover.splice(idx, 1);
+  saveState();
+  renderQuests();
+  renderUnfinished();
+  renderMainQuestPrompt();
+  showToast('Continued into ' + (slot === 0 ? 'Main Quest' : 'Quest ' + (slot+1)));
+}
+
+function finalizeReschedule(id, reasonCode, reasonNote, targetDate){
+  const idx = state.pendingCarryover.findIndex(q => q.id === id);
+  if(idx === -1) return;
+  const q = state.pendingCarryover[idx];
+  q.status = 'rescheduled';
+  q.reasonCode = reasonCode;
+  q.reasonNote = reasonNote || null;
+  q.rescheduledTo = targetDate;
+  logQuestEvent(q, 'rescheduled', { reasonCode, reasonNote: reasonNote || null, rescheduledTo: targetDate });
+  state.pendingCarryover.splice(idx, 1);
+  reasonPanelOpenFor = null;
+  saveState();
+  renderUnfinished();
+  showToast('Rescheduled to ' + targetDate);
+}
+
+function finalizeCancel(id, reasonCode, reasonNote){
+  const idx = state.pendingCarryover.findIndex(q => q.id === id);
+  if(idx === -1) return;
+  const q = state.pendingCarryover[idx];
+  q.status = 'cancelled';
+  q.reasonCode = reasonCode;
+  q.reasonNote = reasonNote || null;
+  logQuestEvent(q, 'cancelled', { reasonCode, reasonNote: reasonNote || null });
+  state.pendingCarryover.splice(idx, 1);
+  reasonPanelOpenFor = null;
+  saveState();
+  renderUnfinished();
+  showToast('Cancelled');
+}
+
+function renderReasonPanel(container, q, action){
+  const panel = document.createElement('div');
+  panel.className = 'reason-panel';
+
+  let dateInput = null;
+  if(action === 'reschedule'){
+    dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = tomorrowStr();
+    panel.appendChild(dateInput);
+    panel.appendChild(document.createElement('br'));
+  }
+
+  const chips = document.createElement('div');
+  chips.className = 'reason-chips';
+
+  QUEST_REASONS.forEach(r => {
+    const chip = document.createElement('button');
+    chip.className = 'reason-chip';
+    chip.textContent = r.label;
+    chip.addEventListener('click', () => {
+      if(r.key === 'other'){
+        // "Other" gets an optional note field instead of resolving instantly.
+        const existingRow = panel.querySelector('.reason-other-row');
+        if(existingRow){ existingRow.remove(); return; }
+        const row = document.createElement('div');
+        row.className = 'reason-other-row';
+        const note = document.createElement('input');
+        note.type = 'text';
+        note.placeholder = 'Optional note…';
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'save-btn';
+        confirmBtn.textContent = 'Confirm';
+        confirmBtn.addEventListener('click', () => {
+          if(action === 'reschedule') finalizeReschedule(q.id, 'other', note.value.trim(), dateInput.value || tomorrowStr());
+          else finalizeCancel(q.id, 'other', note.value.trim());
+        });
+        row.appendChild(note);
+        row.appendChild(confirmBtn);
+        panel.appendChild(row);
+        return;
+      }
+      if(action === 'reschedule') finalizeReschedule(q.id, r.key, null, dateInput.value || tomorrowStr());
+      else finalizeCancel(q.id, r.key, null);
+    });
+    chips.appendChild(chip);
+  });
+
+  panel.appendChild(chips);
+  container.appendChild(panel);
+}
+
+function renderUnfinished(){
+  const card = document.getElementById('unfinishedCard');
+  const wrap = document.getElementById('unfinishedList');
+  wrap.innerHTML = '';
+
+  if(state.pendingCarryover.length === 0){
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+
+  const labelFor = q => q.role === 'main' ? 'Main Quest' : 'Side Quest';
+
+  state.pendingCarryover.forEach(q => {
+    const item = document.createElement('div');
+    item.className = 'unfinished-item';
+
+    const top = document.createElement('div');
+    top.className = 'unfinished-top';
+    const tag = document.createElement('span');
+    tag.className = 'unfinished-tag';
+    tag.textContent = labelFor(q);
+    const text = document.createElement('span');
+    text.className = 'unfinished-text';
+    text.textContent = q.text;
+    top.appendChild(tag);
+    top.appendChild(text);
+    item.appendChild(top);
+
+    const actions = document.createElement('div');
+    actions.className = 'unfinished-actions';
+
+    const continueBtn = document.createElement('button');
+    continueBtn.className = 'unfinished-btn continue';
+    continueBtn.textContent = 'CONTINUE';
+    continueBtn.addEventListener('click', () => continueQuest(q.id));
+
+    const rescheduleBtn = document.createElement('button');
+    rescheduleBtn.className = 'unfinished-btn reschedule';
+    rescheduleBtn.textContent = 'RESCHEDULE';
+    rescheduleBtn.addEventListener('click', () => {
+      reasonPanelOpenFor = reasonPanelOpenFor && reasonPanelOpenFor.id === q.id && reasonPanelOpenFor.action === 'reschedule' ? null : { id: q.id, action: 'reschedule' };
+      renderUnfinished();
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'unfinished-btn cancel';
+    cancelBtn.textContent = 'CANCEL';
+    cancelBtn.addEventListener('click', () => {
+      reasonPanelOpenFor = reasonPanelOpenFor && reasonPanelOpenFor.id === q.id && reasonPanelOpenFor.action === 'cancel' ? null : { id: q.id, action: 'cancel' };
+      renderUnfinished();
+    });
+
+    actions.appendChild(continueBtn);
+    actions.appendChild(rescheduleBtn);
+    actions.appendChild(cancelBtn);
+    item.appendChild(actions);
+
+    if(reasonPanelOpenFor && reasonPanelOpenFor.id === q.id){
+      renderReasonPanel(item, q, reasonPanelOpenFor.action);
+    }
+
+    wrap.appendChild(item);
   });
 }
 
@@ -931,6 +1358,8 @@ function resetTimer(){
   stopTimerLoop();
   dismissTimerBanner();
   renderTimer();
+  renderMainQuestPrompt();
+  renderQuests(); // unlocks the Main Quest field again
 }
 
 function tickTimer(){
@@ -951,8 +1380,13 @@ function tickTimer(){
     t.endAt = null;
     saveState();
     stopTimerLoop();
+    // Crossing into "done" is the one moment the Main Quest lock state
+    // actually changes — re-render quests once here rather than every
+    // tick, so typing in a quest field never loses focus mid-countdown.
+    renderQuests();
   }
   renderTimer();
+  renderMainQuestPrompt();
 }
 
 function startTimerLoop(){
@@ -1313,7 +1747,70 @@ document.getElementById('caseSaveBtn').addEventListener('click', () => {
 });
 
 /* ---------- History ---------- */
+/* ---------- Quest weekly insights ----------
+   Purely descriptive, no scoring or streaks. Only counts quests that
+   reached a terminal state (completed/rescheduled/cancelled) — anything
+   still not_started/in_progress simply isn't judged yet, in or out of
+   pendingCarryover.
+*/
+function questLogThisWeek(){
+  const monday = parseDate(mondayOf(new Date()));
+  const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+  return state.questLog.filter(e => {
+    const d = parseDate(e.resolvedDate);
+    return d >= monday && d <= sunday;
+  });
+}
+
+function renderQuestInsights(){
+  const wrap = document.getElementById('questInsightsWrap');
+  const log = questLogThisWeek();
+
+  if(log.length === 0){
+    wrap.innerHTML = '<div class="empty-note">No quests resolved yet this week — this fills in as you complete, reschedule, or cancel.</div>';
+    return;
+  }
+
+  const mainEntries = log.filter(e => e.role === 'main');
+  const mainCompleted = mainEntries.filter(e => e.status === 'completed').length;
+  const totalCompleted = log.filter(e => e.status === 'completed').length;
+  const rescheduled = log.filter(e => e.status === 'rescheduled').length;
+  const cancelled = log.filter(e => e.status === 'cancelled').length;
+
+  const cards = [
+    { label: 'Main Quests Completed', value: `${mainCompleted} / ${mainEntries.length}` },
+    { label: 'Total Quests Completed', value: `${totalCompleted} / ${log.length}` },
+    { label: 'Rescheduled', value: String(rescheduled) },
+    { label: 'Cancelled', value: String(cancelled) }
+  ];
+
+  let html = '<div class="insight-grid">' + cards.map(c => `
+    <div class="insight-card">
+      <div class="insight-label">${c.label}</div>
+      <div class="insight-value">${c.value}</div>
+    </div>`).join('') + '</div>';
+
+  // Most common reason — only surfaced once there's enough data to be
+  // meaningful (2+ of the same reason), per a light, non-judgmental read.
+  const reasonCounts = {};
+  log.filter(e => e.status === 'rescheduled' || e.status === 'cancelled').forEach(e => {
+    if(!e.reasonCode) return;
+    reasonCounts[e.reasonCode] = (reasonCounts[e.reasonCode] || 0) + 1;
+  });
+  let topReason = null, topCount = 0;
+  Object.entries(reasonCounts).forEach(([key, count]) => {
+    if(count > topCount){ topCount = count; topReason = key; }
+  });
+  if(topReason && topCount >= 2){
+    const label = (QUEST_REASONS.find(r => r.key === topReason) || {}).label || topReason;
+    html += `<div class="insight-reason">Most common reason: ${label}</div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
 function renderHistory(){
+  renderQuestInsights();
   const dayWrap = document.getElementById('dayHistoryWrap');
   if(state.dayHistory.length === 0){
     dayWrap.innerHTML = '<div class="empty-note">No days logged yet — history fills in once a day ends.</div>';
@@ -1398,7 +1895,9 @@ function renderAll(){
   renderHeader();
   renderGoal();
   renderFycOpened();
+  renderUnfinished();
   renderQuests();
+  renderMainQuestPrompt();
   renderDailies();
   renderTimer();
   renderStats();
