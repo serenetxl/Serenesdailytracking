@@ -387,6 +387,18 @@
   }
   .kanban-card-del{ background:none; border:none; color: var(--ink-faint); cursor:pointer; font-size:13px; padding:4px; flex-shrink:0; }
   .kanban-card-del:hover{ color: var(--rose); }
+  .kanban-card-flag{
+    background:none; border:none; color: var(--ink-faint); cursor:pointer; font-size:13px; padding:4px;
+    flex-shrink:0; opacity:0.5; transition: opacity .15s;
+  }
+  .kanban-card-flag:hover{ opacity:1; }
+  .kanban-card-flag.active{ opacity:1; }
+  .kanban-card.revisit{ background: var(--rose-soft); border:1px dashed rgba(216,116,154,0.5); }
+  .kanban-card-revisit-tag{
+    font-family: var(--font-mono); font-size:9.5px; color: var(--rose); background: rgba(216,116,154,0.16);
+    padding:2px 6px; border-radius:999px; letter-spacing:0.03em; display:inline-block; margin-bottom:6px;
+  }
+  .kanban-col-sub .flagged-note{ color: var(--rose); }
 </style>
 </head>
 <body>
@@ -1625,14 +1637,24 @@ function genCaseId(){
 function fycOpenedTotal(){
   // "Opened" = Proposed only — it's the act of presenting that counts, per
   // how the practice actually tracks it. Prospect/Open cases haven't been
-  // presented yet; Closed/Inforced have moved past "open."
+  // presented yet; Closed/Inforced have moved past "open." Flagged-for-revisit
+  // cases are excluded too — a stalled case shouldn't inflate this number.
   return state.pipeline.cases
-    .filter(c => c.stage === 'proposed')
+    .filter(c => c.stage === 'proposed' && !c.revisit)
     .reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
 }
 
 function renderFycOpened(){
   document.getElementById('fycOpenedValue').textContent = '$' + fycOpenedTotal().toLocaleString('en-SG');
+}
+
+function toggleRevisit(caseId){
+  const c = state.pipeline.cases.find(x => x.id === caseId);
+  if(!c) return;
+  c.revisit = !c.revisit;
+  saveState();
+  renderPipeline();
+  renderFycOpened();
 }
 
 function moveCaseStage(caseId, newStage){
@@ -1667,7 +1689,11 @@ function renderPipeline(){
   board.innerHTML = '';
   PIPELINE_STAGES.forEach(stage => {
     const cases = state.pipeline.cases.filter(c => c.stage === stage.key);
-    const subtotal = cases.reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+    const flaggedCount = cases.filter(c => c.revisit).length;
+    // Flagged cases don't count toward the $ subtotal — same reasoning as
+    // Total FYC Opened — but they're still shown as cards and still count
+    // toward the plain case count.
+    const subtotal = cases.filter(c => !c.revisit).reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
 
     const col = document.createElement('div');
     col.className = 'kanban-col';
@@ -1679,7 +1705,7 @@ function renderPipeline(){
     title.textContent = `${stage.label} (${stage.sub})`;
     const sub = document.createElement('div');
     sub.className = 'kanban-col-sub';
-    sub.textContent = `${cases.length} · $${subtotal.toLocaleString('en-SG')}`;
+    sub.innerHTML = `${cases.length} · $${subtotal.toLocaleString('en-SG')}` + (flaggedCount ? ` <span class="flagged-note">(${flaggedCount} flagged)</span>` : '');
     head.appendChild(title);
     head.appendChild(sub);
     col.appendChild(head);
@@ -1693,7 +1719,14 @@ function renderPipeline(){
 
     cases.forEach(c => {
       const card = document.createElement('div');
-      card.className = 'kanban-card';
+      card.className = 'kanban-card' + (c.revisit ? ' revisit' : '');
+
+      if(c.revisit){
+        const tag = document.createElement('div');
+        tag.className = 'kanban-card-revisit-tag';
+        tag.textContent = '🚩 Revisit — FYC not counted';
+        card.appendChild(tag);
+      }
 
       // All three fields are editable right on the card — useful for
       // Prospect-stage entries where you've only got a name so far and
@@ -1742,6 +1775,12 @@ function renderPipeline(){
       });
       select.addEventListener('change', () => moveCaseStage(c.id, select.value));
 
+      const flagBtn = document.createElement('button');
+      flagBtn.className = 'kanban-card-flag' + (c.revisit ? ' active' : '');
+      flagBtn.textContent = '🚩';
+      flagBtn.title = c.revisit ? 'Unflag — count this case again' : 'Flag for revisit — excludes FYC from totals';
+      flagBtn.addEventListener('click', () => toggleRevisit(c.id));
+
       const del = document.createElement('button');
       del.className = 'kanban-card-del';
       del.textContent = '✕';
@@ -1751,6 +1790,7 @@ function renderPipeline(){
       });
 
       row.appendChild(select);
+      row.appendChild(flagBtn);
       row.appendChild(del);
 
       card.appendChild(client);
@@ -1784,6 +1824,7 @@ document.getElementById('caseSaveBtn').addEventListener('click', () => {
     id: genCaseId(),
     client, caseName, fyc, stage,
     inforcedCounted: false,
+    revisit: false,
     createdAt: fmtDate(new Date())
   });
   saveState();
