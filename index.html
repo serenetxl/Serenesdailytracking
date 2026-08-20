@@ -726,6 +726,27 @@ function defaultState(){
   };
 }
 
+// Converts a quest object that may be in the old pre-lifecycle shape
+// ({text, done}) into the current shape. Anything already in the new
+// shape (has a status field) passes through untouched.
+function normalizeQuest(q, index){
+  if(!q) return emptyQuest(index === 0 ? 'main' : 'side');
+  if(q.status) return q; // already current shape
+  const role = index === 0 ? 'main' : 'side';
+  const hasText = q.text && q.text.trim();
+  return {
+    id: hasText ? genId('q') : null,
+    text: q.text || '',
+    role,
+    status: q.done ? 'completed' : 'not_started',
+    createdDate: hasText ? fmtDate(new Date()) : null,
+    carriedDates: [],
+    completedDate: q.done && hasText ? fmtDate(new Date()) : null,
+    startedAt: null,
+    reasonCode: null, reasonNote: null, rescheduledTo: null
+  };
+}
+
 function loadState(){
   let raw;
   try { raw = localStorage.getItem(STORAGE_KEY); } catch(e) { raw = null; }
@@ -734,16 +755,18 @@ function loadState(){
     const parsed = JSON.parse(raw);
     // shallow-merge with defaults to survive future field additions
     const base = defaultState();
+    const mergedToday = { ...base.today, ...(parsed.today||{}), timer: { ...base.today.timer, ...(((parsed.today||{}).timer)||{}) } };
+    mergedToday.quests = (mergedToday.quests || defaultQuests()).map(normalizeQuest);
     return {
       ...base, ...parsed,
       goal: { ...base.goal, ...(parsed.goal||{}) },
       weeklyTargets: { ...base.weeklyTargets, ...(parsed.weeklyTargets||{}) },
       currentWeek: { ...base.currentWeek, ...(parsed.currentWeek||{}), stats: { ...base.currentWeek.stats, ...((parsed.currentWeek||{}).stats||{}) } },
-      today: { ...base.today, ...(parsed.today||{}), timer: { ...base.today.timer, ...(((parsed.today||{}).timer)||{}) } },
+      today: mergedToday,
       weekHistory: parsed.weekHistory || [],
       dayHistory: parsed.dayHistory || [],
       pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
-      pendingCarryover: parsed.pendingCarryover || [],
+      pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
       questLog: parsed.questLog || []
     };
   }catch(e){
@@ -999,7 +1022,7 @@ function renderQuests(){
 
       const pill = document.createElement('span');
       pill.className = 'quest-status-pill ' + q.status;
-      pill.textContent = q.status === 'not_started' ? 'Not Started' : q.status === 'in_progress' ? 'In Progress' : 'Completed';
+      pill.textContent = q.status === 'completed' ? 'Completed' : q.status === 'in_progress' ? 'In Progress' : 'Not Started';
       meta.appendChild(pill);
 
       // Done is rendered before Start and Start comes last: when Start is
