@@ -9,7 +9,8 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
@@ -78,6 +79,18 @@ export function initFirebase() {
   return { app: _app, auth: _auth, db: _db, storage: _storage };
 }
 export { signInWithEmailAndPassword, onAuthStateChanged, signOut };
+export { updatePassword, reauthenticateWithCredential, EmailAuthProvider };
+
+// Changes the signed-in user's password. Firebase requires a recent sign-in
+// for this, so we reauthenticate with their current password first — this
+// also doubles as "confirm you know your current password" before changing it.
+export async function changeOwnPassword(auth, currentPassword, newPassword) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in.");
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
+}
 export { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp };
 export { ref, uploadBytes, getDownloadURL };
 

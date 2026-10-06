@@ -84,8 +84,19 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
   <div style="display:flex;gap:8px;align-items:center">
     <input id="adjAmount" type="number" placeholder="+/- points" style="width:120px">
     <input id="adjReason" placeholder="reason" style="flex:1">
-    <button id="adjBtn">Apply</button>
+    <button id="adjBtn" disabled>Apply</button>
   </div>
+  <p class="sub" id="adjStatus" style="margin:8px 0 0"></p>
+</div>
+
+<div class="card">
+  <h2>Change Your Password</h2>
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:280px">
+    <input id="pwCurrent" type="password" placeholder="Current password">
+    <input id="pwNew" type="password" placeholder="New password (min 6 chars)">
+    <button id="pwChangeBtn">Change Password</button>
+  </div>
+  <p class="sub" id="pwStatus" style="margin:8px 0 0"></p>
 </div>
 
 <div class="card">
@@ -99,7 +110,7 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin
+  pingOdin, changeOwnPassword
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -125,13 +136,21 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('adjBtn').addEventListener('click', applyManualAdjustment);
+    document.getElementById('pwChangeBtn').addEventListener('click', doChangePassword);
     onSnapshot(stateRef, (snap) => {
-      if(!snap.exists()) return;
+      if(!snap.exists()){
+        document.getElementById('approvalWrap').innerHTML = '<p class="sub" style="color:var(--amber)">No data yet — open serene.html and sign in there first to create it.</p>';
+        return;
+      }
       state = snap.data();
+      document.getElementById('adjBtn').disabled = false;
       renderOverview(); renderApprovals(); renderWeekly(); renderPipeline();
+    }, (err) => {
+      console.error('Firestore read failed', err);
+      document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
     });
     const ledgerQ = query(collection(db, "pointsLedger"), orderBy("ts", "desc"), limit(25));
-    onSnapshot(ledgerQ, (snap) => renderLedger(snap.docs.map(d => d.data())));
+    onSnapshot(ledgerQ, (snap) => renderLedger(snap.docs.map(d => d.data())), (err) => console.error('Ledger read failed', err));
   } else {
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('hidden');
@@ -255,16 +274,47 @@ function renderLedger(items){
 }
 
 async function applyManualAdjustment(){
+  const statusEl = document.getElementById('adjStatus');
+  statusEl.textContent = '';
+  if(!state){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'No data loaded yet — try again in a moment.'; return; }
   const amount = Number(document.getElementById('adjAmount').value);
   const reason = document.getElementById('adjReason').value.trim() || 'Manual adjustment by Odin';
-  if(!amount) return;
-  await updateDoc(stateRef, { 'points.total': state.points.total + amount });
-  await addDoc(collection(db, "pointsLedger"), {
-    ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'penalty', amount, reason,
-    date: new Date().toISOString().slice(0,10), pingSent: false
-  });
-  document.getElementById('adjAmount').value = '';
-  document.getElementById('adjReason').value = '';
+  if(!amount){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'Enter a non-zero amount first.'; return; }
+  try{
+    await updateDoc(stateRef, { 'points.total': state.points.total + amount });
+    await addDoc(collection(db, "pointsLedger"), {
+      ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'penalty', amount, reason,
+      date: new Date().toISOString().slice(0,10), pingSent: false
+    });
+    document.getElementById('adjAmount').value = '';
+    document.getElementById('adjReason').value = '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Applied ${amount > 0 ? '+' : ''}${amount} pts.`;
+  }catch(e){
+    console.error('Point adjustment failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+
+async function doChangePassword(){
+  const statusEl = document.getElementById('pwStatus');
+  const current = document.getElementById('pwCurrent').value;
+  const next = document.getElementById('pwNew').value;
+  statusEl.textContent = '';
+  if(!current || !next){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'Fill in both fields.'; return; }
+  if(next.length < 6){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'New password needs at least 6 characters.'; return; }
+  try{
+    await changeOwnPassword(auth, current, next);
+    document.getElementById('pwCurrent').value = '';
+    document.getElementById('pwNew').value = '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = 'Password changed.';
+  }catch(e){
+    console.error('Password change failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
 }
 
 function escapeHtml(s){ return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

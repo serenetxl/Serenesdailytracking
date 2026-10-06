@@ -962,18 +962,29 @@ onAuthStateChanged(auth, async (user) => {
   if(user){
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-    state = await loadState();
-    await checkDailyReset();
-    checkWeeklyReset();
-    wireAllHandlers();
-    renderAll();
-    initTimer();
+    try{
+      state = await loadState();
+      await checkDailyReset();
+      checkWeeklyReset();
+      wireAllHandlers();
+      renderAll();
+      initTimer();
+    }catch(e){
+      console.error('Startup failed', e);
+      document.getElementById('app').innerHTML = `<div class="card"><div class="card-title" style="color:var(--rose)">Couldn't load your data</div>
+        <p style="color:var(--ink-dim);font-size:13px">${e.message}</p>
+        <p style="color:var(--ink-faint);font-size:12px">This is usually Firestore rules not published yet, or this account not added in Firebase Authentication. Check Firebase Console → Firestore Database → Rules (must say Published), and Authentication → Users.</p></div>`;
+      return;
+    }
     onSnapshot(stateRef, (snap) => {
       if(snap.metadata.hasPendingWrites) return; // our own optimistic write, already rendered
       if(ignoreNextLocalEcho){ ignoreNextLocalEcho = false; }
       if(!snap.exists()) return;
       state = mergeWithDefaults(snap.data());
       renderAll();
+    }, (err) => {
+      console.error('Live sync failed', err);
+      showToast("Sync error — check Firestore rules");
     });
     setInterval(async () => {
       const beforeDay = state.today.date;
