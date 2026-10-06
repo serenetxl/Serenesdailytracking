@@ -872,7 +872,15 @@ let ignoreNextLocalEcho = false;
 
 async function loadState(){
   const snap = await getDoc(stateRef);
-  return mergeWithDefaults(snap.exists() ? snap.data() : null);
+  const merged = mergeWithDefaults(snap.exists() ? snap.data() : null);
+  if(!snap.exists()){
+    // First-ever load: nothing in Firestore yet. Write the defaults now so
+    // the doc actually exists — otherwise the app looks fully loaded here
+    // but Odin's panel (and any other device) sees nothing until you
+    // happen to edit something that triggers a save.
+    await setDoc(stateRef, merged);
+  }
+  return merged;
 }
 
 function saveState(){
