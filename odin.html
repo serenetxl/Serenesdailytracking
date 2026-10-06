@@ -90,6 +90,22 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 </div>
 
 <div class="card">
+  <h2>Manual Streak Adjustment</h2>
+  <p class="sub" style="margin-bottom:8px">Adjusts streak days directly — multiplier recalculates automatically (1.5x at 7d, 2x at 35d, 2.5x at 140d). Use a negative number, or a large negative, to break a streak manually.</p>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="streakAdjAmount" type="number" placeholder="+/- days" style="width:120px">
+    <input id="streakAdjReason" placeholder="reason" style="flex:1">
+    <button id="streakAdjBtn" disabled>Apply</button>
+  </div>
+  <p class="sub" id="streakAdjStatus" style="margin:8px 0 0"></p>
+</div>
+
+<div class="card">
+  <h2>Inventory (Reward Items)</h2>
+  <div id="inventoryWrap"></div>
+</div>
+
+<div class="card">
   <h2>Change Your Password</h2>
   <div style="display:flex;flex-direction:column;gap:8px;max-width:280px">
     <input id="pwCurrent" type="password" placeholder="Current password">
@@ -110,7 +126,7 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin, changeOwnPassword
+  pingOdin, changeOwnPassword, computeMultiplier
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -136,6 +152,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('adjBtn').addEventListener('click', applyManualAdjustment);
+    document.getElementById('streakAdjBtn').addEventListener('click', applyStreakAdjustment);
     document.getElementById('pwChangeBtn').addEventListener('click', doChangePassword);
     onSnapshot(stateRef, (snap) => {
       if(!snap.exists()){
@@ -144,7 +161,8 @@ onAuthStateChanged(auth, async (user) => {
       }
       state = snap.data();
       document.getElementById('adjBtn').disabled = false;
-      renderOverview(); renderApprovals(); renderWeekly(); renderPipeline();
+      document.getElementById('streakAdjBtn').disabled = false;
+      renderOverview(); renderApprovals(); renderWeekly(); renderPipeline(); renderInventory();
     }, (err) => {
       console.error('Firestore read failed', err);
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
@@ -292,6 +310,43 @@ async function applyManualAdjustment(){
     statusEl.textContent = `Applied ${amount > 0 ? '+' : ''}${amount} pts.`;
   }catch(e){
     console.error('Point adjustment failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+
+function renderInventory(){
+  const wrap = document.getElementById('inventoryWrap');
+  const items = state.rewardItems || [];
+  if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
+  wrap.innerHTML = items.map(item => `
+    <div class="row">
+      <span>${item.name} <span class="sub" style="margin:0">— ${item.description || ''}</span></span>
+      <span class="pill ${item.qty > 0 ? 'green' : 'red'}">${item.qty}/${item.maxQty} in stock · ${item.cost} pts</span>
+    </div>`).join('');
+}
+
+async function applyStreakAdjustment(){
+  const statusEl = document.getElementById('streakAdjStatus');
+  statusEl.textContent = '';
+  if(!state){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'No data loaded yet — try again in a moment.'; return; }
+  const amount = Number(document.getElementById('streakAdjAmount').value);
+  const reason = document.getElementById('streakAdjReason').value.trim() || 'Manual streak adjustment by Odin';
+  if(!amount){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'Enter a non-zero amount first.'; return; }
+  try{
+    const newStreakDays = Math.max(0, state.points.streakDays + amount);
+    const newMultiplier = computeMultiplier(newStreakDays);
+    await updateDoc(stateRef, { 'points.streakDays': newStreakDays, 'points.multiplier': newMultiplier });
+    await addDoc(collection(db, "pointsLedger"), {
+      ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'streak_break', amount: 0, reason: `${reason} (streak ${amount > 0 ? '+' : ''}${amount}d)`,
+      date: new Date().toISOString().slice(0,10), pingSent: false
+    });
+    document.getElementById('streakAdjAmount').value = '';
+    document.getElementById('streakAdjReason').value = '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Streak now ${newStreakDays}d (${newMultiplier}x).`;
+  }catch(e){
+    console.error('Streak adjustment failed', e);
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `Failed: ${e.message}`;
   }
