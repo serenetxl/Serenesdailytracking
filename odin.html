@@ -142,7 +142,7 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin, changeOwnPassword, computeMultiplier
+  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -371,16 +371,22 @@ function renderRewardsManage(){
   const wrap = document.getElementById('rewardsManageWrap');
   const items = state.rewardItems || [];
   if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
+  const weeksUnbroken = computeWeeklyStreakWeeks(state.weekHistory || []);
   wrap.innerHTML = items.map(item => {
     const unlimited = item.maxQty >= 9999;
-    const stockLabel = unlimited ? 'unlimited' : `${item.qty}/${item.maxQty} in stock`;
+    let stockLabel;
+    if(item.requiresWeeklyStreak){
+      stockLabel = item.qty > 0 ? 'unlocked — free redeem' : `locked · ${Math.min(weeksUnbroken, item.requiresWeeklyStreak)}/${item.requiresWeeklyStreak} wks unbroken`;
+    } else {
+      stockLabel = unlimited ? 'unlimited' : `${item.qty}/${item.maxQty} in stock`;
+    }
     return `
     <div class="row" style="flex-wrap:wrap;align-items:flex-start">
       <div style="flex:2;min-width:180px;display:flex;flex-direction:column;gap:4px">
         <input data-field="name" data-id="${item.id}" value="${escapeHtml(item.name)}">
         <input data-field="description" data-id="${item.id}" value="${escapeHtml(item.description || '')}" placeholder="description">
       </div>
-      <input data-field="cost" data-id="${item.id}" type="number" value="${item.cost ?? ''}" placeholder="cost (blank = TBD)" style="width:140px">
+      <input data-field="cost" data-id="${item.id}" type="number" value="${item.cost ?? ''}" placeholder="cost (blank = TBD)" style="width:140px" ${item.requiresWeeklyStreak ? 'disabled title="Streak-gated reward — cost fixed at 0"' : ''}>
       <span class="pill ${item.qty > 0 || unlimited ? 'green' : 'red'}">${stockLabel}</span>
       <button data-save="${item.id}">Save</button>
       <button data-delete="${item.id}" style="border-color:var(--red);color:var(--red)">Delete</button>

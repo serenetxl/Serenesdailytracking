@@ -166,9 +166,10 @@ export const DEFAULT_REWARD_ITEMS = [
     description: "Cost to be negotiated with Odin — not an instant redeem."
   },
   {
-    id: "hair-treatment", name: "Hair treatment", cost: 10,
-    qty: 0, maxQty: 1, refreshRule: "every-6-months", lastRefreshed: "2025-09-25",
-    description: "Capped at $300. Once per 6 months (last redeemed 25 Sep 2025) — confirm the 10pt cost with Odin, the original sheet had it under a non-standard label."
+    id: "hair-treatment", name: "Hair treatment", cost: 0,
+    qty: 0, maxQty: 1, refreshRule: null, lastRefreshed: "2025-09-25",
+    requiresWeeklyStreak: 10, cooldownMonths: 6,
+    description: "Capped at $300. Not bought with points — unlocks free once you've gone 10 straight weeks without breaking your daily or weekly streak, and at least 6 months since it was last used (last used 25 Sep 2025, so the cooldown is already clear — it's purely gated on the 10-week streak now)."
   }
 ];
 
@@ -288,10 +289,11 @@ export function redeemReward(points, rewardItems, rewardId, now = new Date()) {
   const newItems = rewardItems.map(r => {
     if (r.id !== rewardId) return r;
     const newQty = r.qty - 1;
-    // Cooldown-style rewards (e.g. "once per 6 months") count down from the
-    // date they're actually used, not a fixed calendar tick, so stamp
-    // lastRefreshed here the moment stock hits zero.
-    const stampCooldown = r.refreshRule === "every-6-months" && newQty <= 0;
+    // Cooldown-gated rewards (e.g. hair treatment's "once per 6 months")
+    // count down from the date they're actually used, so stamp lastRefreshed
+    // — and reset the weekly-streak gate that unlocked it — the moment
+    // stock hits zero.
+    const stampCooldown = r.requiresWeeklyStreak && newQty <= 0;
     return stampCooldown ? { ...r, qty: newQty, lastRefreshed: fmtDate(now) } : { ...r, qty: newQty };
   });
   const event = { type: "redeem", amount: -item.cost, reason: `Redeemed: ${item.name}`, ping: true };
@@ -312,8 +314,6 @@ export function refreshRewardItems(rewardItems, now = new Date()) {
       due = !last || (now.getFullYear() * 12 + now.getMonth()) > (last.getFullYear() * 12 + last.getMonth());
     } else if (item.refreshRule === "yearly-jan1") {
       due = !last || now.getFullYear() > last.getFullYear();
-    } else if (item.refreshRule === "every-6-months") {
-      due = !last || monthsBetween(last, now) >= 6;
     }
     if (due && item.qty < item.maxQty) {
       return { ...item, qty: item.maxQty, lastRefreshed: now.toISOString().slice(0, 10) };
@@ -337,8 +337,41 @@ function weeksBetweenMondays(a, b) {
   const ma = mondayOf(a), mb = mondayOf(b);
   return Math.round((mb - ma) / (7 * 24 * 60 * 60 * 1000));
 }
-function monthsBetween(a, b) {
+export function monthsBetween(a, b) {
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+}
+
+// Consecutive unbroken weeks, counting back from the most recent (weekHistory
+// is newest-first via unshift). A week counts as "unbroken" only if every
+// weekly target was hit — see weekHistory entry's metAllTargets flag.
+export function computeWeeklyStreakWeeks(weekHistory) {
+  let n = 0;
+  for (const w of (weekHistory || [])) {
+    if (w.metAllTargets) n++; else break;
+  }
+  return n;
+}
+
+/**
+ * Unlocks/locks reward items gated on a weekly streak (e.g. the hair
+ * treatment: 10 unbroken weeks, both daily AND weekly, plus a cooldown since
+ * it was last used) rather than a points cost. Call alongside
+ * refreshRewardItems() on load / daily reset / weekly reset — idempotent.
+ */
+export function refreshConditionalRewards(rewardItems, pointsState, weekHistory, now = new Date()) {
+  const weeksUnbroken = computeWeeklyStreakWeeks(weekHistory);
+  return rewardItems.map(item => {
+    if (!item.requiresWeeklyStreak) return item;
+    const cooldownOk = !item.lastRefreshed || monthsBetween(new Date(item.lastRefreshed), now) >= (item.cooldownMonths || 0);
+    // streakDays is the daily streak (settleDay's "all 3 quests cleared"
+    // counter) — requiring it to be at least requiresWeeklyStreak*7 days
+    // proves the daily side never broke across those same weeks.
+    const streakOk = pointsState.streakDays >= item.requiresWeeklyStreak * 7 && weeksUnbroken >= item.requiresWeeklyStreak;
+    const eligible = cooldownOk && streakOk;
+    if (eligible && item.qty < item.maxQty) return { ...item, qty: item.maxQty };
+    if (!eligible && item.qty > 0) return { ...item, qty: 0 };
+    return item;
+  });
 }
 
 /**

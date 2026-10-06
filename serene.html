@@ -495,24 +495,6 @@
       <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
     </div>
 
-    <!-- Points & Streak (clear, standalone — not just the header badge) -->
-    <div class="card">
-      <div class="card-head">
-        <div class="card-title"><span class="icon">⭐</span>Points &amp; Streak</div>
-      </div>
-      <div class="tp-ex-grid">
-        <div>
-          <div class="stat-name">POINTS AVAILABLE TO SPEND</div>
-          <div class="mini-stat" id="pointsBig">0 pts</div>
-        </div>
-        <div>
-          <div class="stat-name">CURRENT STREAK</div>
-          <div class="mini-stat" id="streakBig">0 days</div>
-          <div class="empty-note" style="padding:0" id="streakMultNote"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Unfinished from yesterday -->
     <div class="card" id="unfinishedCard" style="display:none;">
       <div class="card-head">
@@ -602,6 +584,24 @@
           <input type="file" id="exercisePhotoInput" accept="image/*" style="display:block;margin-bottom:8px;font-size:12px">
           <button class="ghost-btn" id="exerciseBtn">Log exercise (Odin approves)</button>
           <div class="empty-note" style="padding:6px 0 0" id="exercisePhotoNote"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Points & Streak (clear, standalone — not just the header badge) — sits right above Rewards so the spend-power is visible right where you spend it -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">⭐</span>Points &amp; Streak</div>
+      </div>
+      <div class="tp-ex-grid">
+        <div>
+          <div class="stat-name">POINTS AVAILABLE TO SPEND</div>
+          <div class="mini-stat" id="pointsBig">0 pts</div>
+        </div>
+        <div>
+          <div class="stat-name">CURRENT STREAK</div>
+          <div class="mini-stat" id="streakBig">0 days</div>
+          <div class="empty-note" style="padding:0" id="streakMultNote"></div>
         </div>
       </div>
     </div>
@@ -708,7 +708,8 @@
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
-  settleDay, redeemReward, refreshRewardItems, logTouchpoint, pingOdin,
+  settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, computeWeeklyStreakWeeks,
+  logTouchpoint, pingOdin,
   DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
 } from "./shared.js";
 
@@ -878,7 +879,12 @@ function mergeWithDefaults(parsed){
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
     questLog: parsed.questLog || [],
     points: { ...base.points, ...(parsed.points||{}) },
-    rewardItems: mergeRewardItems(base.rewardItems, parsed.rewardItems),
+    rewardItems: refreshConditionalRewards(
+      mergeRewardItems(base.rewardItems, parsed.rewardItems),
+      { ...base.points, ...(parsed.points || {}) },
+      parsed.weekHistory || [],
+      new Date()
+    ),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
 }
@@ -953,6 +959,7 @@ async function checkDailyReset(){
     }
 
     state.rewardItems = refreshRewardItems(state.rewardItems, new Date());
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.points, state.weekHistory, new Date());
     state.today = defaultToday(todayStr);
     saveState();
   }
@@ -966,11 +973,18 @@ function checkWeeklyReset(){
     if(hadActivity){
       const start = parseDate(w.weekStart);
       const end = new Date(start); end.setDate(end.getDate() + 6);
+      const targets = { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) };
+      const metAllTargets = Object.keys(targets).every(key => (w.stats[key] || 0) >= targets[key]);
       state.weekHistory.unshift({
         weekStart: w.weekStart, weekEnd: fmtDate(end), stats: w.stats,
-        targets: { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) }
+        targets, metAllTargets
       });
+    } else {
+      // No activity at all this week breaks the unbroken-weeks streak too —
+      // record it so hair-treatment-style gated rewards don't silently skip it.
+      state.weekHistory.unshift({ weekStart: w.weekStart, weekEnd: fmtDate(new Date(parseDate(w.weekStart).getTime() + 6*86400000)), stats: w.stats, targets: null, metAllTargets: false });
     }
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.points, state.weekHistory, new Date());
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
     saveState();
   }
@@ -1619,13 +1633,22 @@ function wireTouchpointExercise(){
 /* ---------- Rewards ---------- */
 function renderRewards(){
   const wrap = document.getElementById('rewardsWrap');
+  const weeksUnbroken = computeWeeklyStreakWeeks(state.weekHistory);
   wrap.innerHTML = state.rewardItems.map(item => {
     const unlimited = item.maxQty >= 9999;
     const qtyLabel = unlimited ? '' : ` · qty ${item.qty}/${item.maxQty}`;
     const priceTBD = item.cost == null;
-    const action = priceTBD
-      ? `<span class="sub" style="margin:0">ask Odin</span>`
-      : `<button class="reward-btn" data-redeem="${item.id}" ${item.qty <= 0 || state.points.total < item.cost ? 'disabled' : ''}>${item.cost} pts</button>`;
+    const streakGated = !!item.requiresWeeklyStreak;
+    let action;
+    if(streakGated){
+      action = item.qty > 0
+        ? `<button class="reward-btn" data-redeem="${item.id}">Redeem (free)</button>`
+        : `<span class="sub" style="margin:0">🔒 ${Math.min(weeksUnbroken, item.requiresWeeklyStreak)}/${item.requiresWeeklyStreak} weeks unbroken</span>`;
+    } else if(priceTBD){
+      action = `<span class="sub" style="margin:0">ask Odin</span>`;
+    } else {
+      action = `<button class="reward-btn" data-redeem="${item.id}" ${item.qty <= 0 || state.points.total < item.cost ? 'disabled' : ''}>${item.cost} pts</button>`;
+    }
     return `
     <div class="reward-row">
       <div>
@@ -1636,7 +1659,8 @@ function renderRewards(){
     </div>`;
   }).join('');
   state.rewardItems.forEach(item => {
-    if(item.cost == null) return;
+    if(item.cost == null && !item.requiresWeeklyStreak) return;
+    if(item.requiresWeeklyStreak && item.qty <= 0) return;
     const btn = wrap.querySelector(`[data-redeem="${item.id}"]`);
     if(btn) btn.addEventListener('click', () => doRedeem(item.id));
   });
