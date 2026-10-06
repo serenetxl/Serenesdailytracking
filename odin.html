@@ -70,6 +70,11 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 </div>
 
 <div class="card">
+  <h2>Journal</h2>
+  <div id="journalWrap"></div>
+</div>
+
+<div class="card">
   <h2>Weekly Summary (last 7 logged days)</h2>
   <div id="weeklyWrap"></div>
 </div>
@@ -101,8 +106,19 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 </div>
 
 <div class="card">
-  <h2>Inventory (Reward Items)</h2>
-  <div id="inventoryWrap"></div>
+  <h2>Manage Rewards</h2>
+  <div id="rewardsManageWrap"></div>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <p class="sub" style="margin-bottom:8px">Add new reward</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <input id="newRewardName" placeholder="Name" style="flex:1;min-width:140px">
+      <input id="newRewardDesc" placeholder="Description" style="flex:1;min-width:140px">
+      <input id="newRewardCost" type="number" placeholder="Cost (pts)" style="width:100px">
+      <input id="newRewardMaxQty" type="number" placeholder="Max qty (blank = unlimited)" style="width:180px">
+      <button id="addRewardBtn">Add</button>
+    </div>
+    <p class="sub" id="rewardAddStatus" style="margin:8px 0 0"></p>
+  </div>
 </div>
 
 <div class="card">
@@ -154,6 +170,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('adjBtn').addEventListener('click', applyManualAdjustment);
     document.getElementById('streakAdjBtn').addEventListener('click', applyStreakAdjustment);
     document.getElementById('pwChangeBtn').addEventListener('click', doChangePassword);
+    document.getElementById('addRewardBtn').addEventListener('click', addReward);
     onSnapshot(stateRef, (snap) => {
       if(!snap.exists()){
         document.getElementById('approvalWrap').innerHTML = '<p class="sub" style="color:var(--amber)">No data yet — open serene.html and sign in there first to create it.</p>';
@@ -162,7 +179,7 @@ onAuthStateChanged(auth, async (user) => {
       state = snap.data();
       document.getElementById('adjBtn').disabled = false;
       document.getElementById('streakAdjBtn').disabled = false;
-      renderOverview(); renderApprovals(); renderWeekly(); renderPipeline(); renderInventory();
+      renderOverview(); renderApprovals(); renderJournal(); renderWeekly(); renderPipeline(); renderRewardsManage();
     }, (err) => {
       console.error('Firestore read failed', err);
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
@@ -256,6 +273,41 @@ async function approveTouchpoint(dateStr, live){
   }
 }
 
+function renderJournal(){
+  const wrap = document.getElementById('journalWrap');
+  const entries = [];
+  const t = state.today;
+  if(t.journal && t.journal.text && t.journal.text.trim()){
+    entries.push({ date: t.date, text: t.journal.text, live: true });
+  }
+  (state.dayHistory || []).forEach(d => {
+    if(d.journal && d.journal.trim()) entries.push({ date: d.date, text: d.journal, live: false });
+  });
+  if(!entries.length){ wrap.innerHTML = '<p class="sub">No journal entries yet.</p>'; return; }
+  wrap.innerHTML = entries.slice(0, 20).map((e, i) => {
+    const preview = e.text.length > 60 ? e.text.slice(0, 60) + '…' : e.text;
+    return `
+    <div class="row" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span>${e.date}${e.live ? ' <span class="pill amber">today</span>' : ''} — <span class="sub" style="margin:0" id="jpreview-${i}">${escapeHtml(preview)}</span></span>
+        <button data-journal-toggle="${i}">Read</button>
+      </div>
+      <div id="jfull-${i}" class="sub hidden" style="white-space:pre-wrap;margin-top:6px">${escapeHtml(e.text)}</div>
+    </div>`;
+  }).join('');
+  entries.slice(0, 20).forEach((e, i) => {
+    const btn = wrap.querySelector(`[data-journal-toggle="${i}"]`);
+    btn.onclick = () => {
+      const full = document.getElementById(`jfull-${i}`);
+      const preview = document.getElementById(`jpreview-${i}`);
+      const open = !full.classList.contains('hidden');
+      full.classList.toggle('hidden');
+      preview.classList.toggle('hidden', !open);
+      btn.textContent = open ? 'Read' : 'Hide';
+    };
+  });
+}
+
 function renderWeekly(){
   const days = [state.today, ...(state.dayHistory || []).slice(0, 6)];
   const submitted = days.filter(d => d.submittedForApproval || d.submitted).length;
@@ -315,15 +367,91 @@ async function applyManualAdjustment(){
   }
 }
 
-function renderInventory(){
-  const wrap = document.getElementById('inventoryWrap');
+function renderRewardsManage(){
+  const wrap = document.getElementById('rewardsManageWrap');
   const items = state.rewardItems || [];
   if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
-  wrap.innerHTML = items.map(item => `
-    <div class="row">
-      <span>${item.name} <span class="sub" style="margin:0">— ${item.description || ''}</span></span>
-      <span class="pill ${item.qty > 0 ? 'green' : 'red'}">${item.qty}/${item.maxQty} in stock · ${item.cost} pts</span>
-    </div>`).join('');
+  wrap.innerHTML = items.map(item => {
+    const unlimited = item.maxQty >= 9999;
+    const stockLabel = unlimited ? 'unlimited' : `${item.qty}/${item.maxQty} in stock`;
+    return `
+    <div class="row" style="flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:2;min-width:180px;display:flex;flex-direction:column;gap:4px">
+        <input data-field="name" data-id="${item.id}" value="${escapeHtml(item.name)}">
+        <input data-field="description" data-id="${item.id}" value="${escapeHtml(item.description || '')}" placeholder="description">
+      </div>
+      <input data-field="cost" data-id="${item.id}" type="number" value="${item.cost ?? ''}" placeholder="cost (blank = TBD)" style="width:140px">
+      <span class="pill ${item.qty > 0 || unlimited ? 'green' : 'red'}">${stockLabel}</span>
+      <button data-save="${item.id}">Save</button>
+      <button data-delete="${item.id}" style="border-color:var(--red);color:var(--red)">Delete</button>
+    </div>`;
+  }).join('');
+  items.forEach(item => {
+    wrap.querySelector(`[data-save="${item.id}"]`).onclick = () => saveRewardEdit(item.id);
+    wrap.querySelector(`[data-delete="${item.id}"]`).onclick = () => deleteReward(item.id, item.name);
+  });
+}
+
+async function saveRewardEdit(id){
+  const statusEl = document.getElementById('rewardAddStatus');
+  const name = document.querySelector(`[data-field="name"][data-id="${id}"]`).value.trim();
+  const description = document.querySelector(`[data-field="description"][data-id="${id}"]`).value.trim();
+  const costRaw = document.querySelector(`[data-field="cost"][data-id="${id}"]`).value;
+  const cost = costRaw === '' ? null : Number(costRaw);
+  if(!name){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'Name can\'t be empty.'; return; }
+  const rewardItems = state.rewardItems.map(r => r.id === id ? { ...r, name, description, cost } : r);
+  try{
+    await updateDoc(stateRef, { rewardItems });
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Updated "${name}".`;
+  }catch(e){
+    console.error('Reward update failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+
+async function deleteReward(id, name){
+  if(!confirm(`Delete reward "${name}"? This can't be undone.`)) return;
+  const statusEl = document.getElementById('rewardAddStatus');
+  const rewardItems = state.rewardItems.filter(r => r.id !== id);
+  try{
+    await updateDoc(stateRef, { rewardItems });
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Deleted "${name}".`;
+  }catch(e){
+    console.error('Reward delete failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
+}
+
+async function addReward(){
+  const statusEl = document.getElementById('rewardAddStatus');
+  statusEl.textContent = '';
+  const name = document.getElementById('newRewardName').value.trim();
+  const description = document.getElementById('newRewardDesc').value.trim();
+  const costRaw = document.getElementById('newRewardCost').value;
+  const cost = costRaw === '' ? null : Number(costRaw);
+  const maxQtyRaw = document.getElementById('newRewardMaxQty').value;
+  const maxQty = maxQtyRaw === '' ? 9999 : Number(maxQtyRaw);
+  if(!name){ statusEl.style.color = 'var(--amber)'; statusEl.textContent = 'Enter a name first.'; return; }
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+  const newItem = { id, name, description, cost, qty: maxQty, maxQty, refreshRule: null, lastRefreshed: null };
+  const rewardItems = [...(state.rewardItems || []), newItem];
+  try{
+    await updateDoc(stateRef, { rewardItems });
+    document.getElementById('newRewardName').value = '';
+    document.getElementById('newRewardDesc').value = '';
+    document.getElementById('newRewardCost').value = '';
+    document.getElementById('newRewardMaxQty').value = '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Added "${name}".`;
+  }catch(e){
+    console.error('Reward add failed', e);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Failed: ${e.message}`;
+  }
 }
 
 async function applyStreakAdjustment(){

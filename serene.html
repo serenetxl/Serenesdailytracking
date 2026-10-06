@@ -580,6 +580,7 @@
         <button class="energy-btn" data-energy="okay"><span class="em">◐</span>Okay</button>
         <button class="energy-btn" data-energy="good"><span class="em">△</span>Good</button>
       </div>
+      <textarea id="journalInput" placeholder="What's on your mind today? (optional — Odin can read this)" rows="3" style="width:100%;margin-top:12px;resize:vertical;font-family:inherit;font-size:13px;padding:10px;border-radius:10px;border:1px solid var(--line, #ddd);box-sizing:border-box"></textarea>
     </div>
 
     <!-- Touchpoint + Exercise (merged tracker) -->
@@ -797,6 +798,7 @@ function defaultToday(dateStr){
     checklist: DAILY_TEMPLATE.map(() => false),
     quests: defaultQuests(),
     energy: null,
+    journal: { text: '', updatedAt: null },
     timer: defaultTimer(),
     touchpoint: { logged: false, photoUrl: null, approved: 'none' },
     exercise: { logged: false, approved: 'none', photoUrl: null },
@@ -838,6 +840,19 @@ function normalizeQuest(q, index){
   };
 }
 
+// Union existing reward items (preserving their live qty/cost/edits) with any
+// new items added to DEFAULT_REWARD_ITEMS since this doc was first created,
+// so a code update that adds reward items doesn't require a manual migration.
+function mergeRewardItems(defaults, existing){
+  if(!existing || !existing.length) return defaults.map(r => ({ ...r }));
+  const byId = new Map(existing.map(r => [r.id, r]));
+  const merged = existing.map(r => ({ ...r }));
+  defaults.forEach(def => {
+    if(!byId.has(def.id)) merged.push({ ...def });
+  });
+  return merged;
+}
+
 function mergeWithDefaults(parsed){
   const base = defaultState();
   if(!parsed) return base;
@@ -845,6 +860,7 @@ function mergeWithDefaults(parsed){
   const mergedToday = {
     ...baseToday, ...(parsed.today||{}),
     timer: { ...baseToday.timer, ...(((parsed.today||{}).timer)||{}) },
+    journal: { ...baseToday.journal, ...(((parsed.today||{}).journal)||{}) },
     touchpoint: { ...baseToday.touchpoint, ...(((parsed.today||{}).touchpoint)||{}) },
     exercise: { ...baseToday.exercise, ...(((parsed.today||{}).exercise)||{}) },
     approval: { ...baseToday.approval, ...(((parsed.today||{}).approval)||{}) }
@@ -862,7 +878,7 @@ function mergeWithDefaults(parsed){
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
     questLog: parsed.questLog || [],
     points: { ...base.points, ...(parsed.points||{}) },
-    rewardItems: parsed.rewardItems || base.rewardItems,
+    rewardItems: mergeRewardItems(base.rewardItems, parsed.rewardItems),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
 }
@@ -923,6 +939,7 @@ async function checkDailyReset(){
       state.dayHistory.unshift({
         date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE.length,
         questsDone, questsTotal: 3, energy: t.energy,
+        journal: (t.journal && t.journal.text && t.journal.text.trim()) ? t.journal.text : null,
         touchpoint: t.touchpoint.logged, touchpointApproved: t.touchpoint.approved, touchpointPhotoUrl: t.touchpoint.photoUrl || null,
         exercise: t.exercise.logged, exerciseApproved: t.exercise.approved, exercisePhotoUrl: t.exercise.photoUrl || null,
         submitted: t.submittedForApproval, approval: t.approval.status
@@ -1524,6 +1541,20 @@ function wireEnergy(){
   });
 }
 
+/* ---------- Journal ---------- */
+function renderJournal(){
+  const ta = document.getElementById('journalInput');
+  if(document.activeElement === ta) return; // don't clobber what she's typing on a remote sync
+  ta.value = (state.today.journal && state.today.journal.text) || '';
+}
+function wireJournal(){
+  const ta = document.getElementById('journalInput');
+  ta.addEventListener('input', () => {
+    state.today.journal = { text: ta.value, updatedAt: new Date().toISOString() };
+    saveState();
+  });
+}
+
 /* ---------- Touchpoint + Exercise ---------- */
 function renderTouchpointExercise(){
   document.getElementById('touchpointCount').textContent = state.touchpointChallenge.count;
@@ -1588,15 +1619,24 @@ function wireTouchpointExercise(){
 /* ---------- Rewards ---------- */
 function renderRewards(){
   const wrap = document.getElementById('rewardsWrap');
-  wrap.innerHTML = state.rewardItems.map(item => `
+  wrap.innerHTML = state.rewardItems.map(item => {
+    const unlimited = item.maxQty >= 9999;
+    const qtyLabel = unlimited ? '' : ` · qty ${item.qty}/${item.maxQty}`;
+    const priceTBD = item.cost == null;
+    const action = priceTBD
+      ? `<span class="sub" style="margin:0">ask Odin</span>`
+      : `<button class="reward-btn" data-redeem="${item.id}" ${item.qty <= 0 || state.points.total < item.cost ? 'disabled' : ''}>${item.cost} pts</button>`;
+    return `
     <div class="reward-row">
       <div>
         <div class="rname">${item.name}</div>
-        <div class="rdesc">${item.description} · qty ${item.qty}/${item.maxQty}</div>
+        <div class="rdesc">${item.description || ''}${qtyLabel}</div>
       </div>
-      <button class="reward-btn" data-redeem="${item.id}" ${item.qty <= 0 || state.points.total < item.cost ? 'disabled' : ''}>${item.cost} pts</button>
-    </div>`).join('');
+      ${action}
+    </div>`;
+  }).join('');
   state.rewardItems.forEach(item => {
+    if(item.cost == null) return;
     const btn = wrap.querySelector(`[data-redeem="${item.id}"]`);
     if(btn) btn.addEventListener('click', () => doRedeem(item.id));
   });
@@ -1888,12 +1928,12 @@ function wireExportImport(){
 function renderAll(){
   renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderUnfinished();
   renderQuests(); renderMainQuestPrompt(); renderDailies(); renderTimer(); renderStats();
-  renderEnergy(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
+  renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
   if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
 }
 function wireAllHandlers(){
-  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy();
+  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal();
   wireTouchpointExercise(); wireSubmitDay(); wirePipeline(); wireExportImport();
 }
 </script>
