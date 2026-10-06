@@ -869,6 +869,8 @@ function mergeWithDefaults(parsed){
 
 let state = defaultState();
 let ignoreNextLocalEcho = false;
+let unsubscribeState = null;
+let resetIntervalId = null;
 
 async function loadState(){
   const snap = await getDoc(stateRef);
@@ -984,17 +986,18 @@ onAuthStateChanged(auth, async (user) => {
         <p style="color:var(--ink-faint);font-size:12px">This is usually Firestore rules not published yet, or this account not added in Firebase Authentication. Check Firebase Console → Firestore Database → Rules (must say Published), and Authentication → Users.</p></div>`;
       return;
     }
-    onSnapshot(stateRef, (snap) => {
+    unsubscribeState = onSnapshot(stateRef, (snap) => {
       if(snap.metadata.hasPendingWrites) return; // our own optimistic write, already rendered
       if(ignoreNextLocalEcho){ ignoreNextLocalEcho = false; }
       if(!snap.exists()) return;
       state = mergeWithDefaults(snap.data());
       renderAll();
     }, (err) => {
+      if(!auth.currentUser) return; // we've signed out — listener is about to be torn down, this is expected
       console.error('Live sync failed', err);
       showToast("Sync error — check Firestore rules");
     });
-    setInterval(async () => {
+    resetIntervalId = setInterval(async () => {
       const beforeDay = state.today.date;
       const beforeWeek = state.currentWeek.weekStart;
       await checkDailyReset();
@@ -1006,6 +1009,9 @@ onAuthStateChanged(auth, async (user) => {
       }
     }, 60 * 1000);
   } else {
+    if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
+    if(resetIntervalId){ clearInterval(resetIntervalId); resetIntervalId = null; }
+    stopTimerLoop();
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('hidden');
   }
