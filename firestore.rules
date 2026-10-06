@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Only these two signed-in accounts may touch any data in this project.
+    // Create both as Firebase Auth users in Console -> Authentication ->
+    // Users -> Add user (any password) before this app will work.
+    function isAllowedUser() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'txlserene@gmail.com',
+          'odinyeo5@gmail.com'
+        ];
+    }
+
+    match /{document=**} {
+      allow read, write: if isAllowedUser();
+    }
+  }
+}

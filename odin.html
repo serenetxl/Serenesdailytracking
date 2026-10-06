@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odin // Serene Tracker Admin</title>
+<style>
+:root{ --bg:#0f1115; --panel:#181b22; --border:#2a2e38; --ink:#e7e9ee; --dim:#8a8f9c;
+  --green:#4ade80; --amber:#fbbf24; --red:#f87171; --blue:#60a5fa; }
+*{box-sizing:border-box}
+body{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg);color:var(--ink);padding:16px;}
+h1{font-size:1.1rem;letter-spacing:.5px;margin:0 0 4px;color:var(--blue)}
+h2{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin:0 0 10px}
+.sub{color:var(--dim);font-size:.8rem;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px}
+.grid{display:grid;gap:12px}
+@media(min-width:800px){.grid-3{grid-template-columns:1fr 1fr 1fr}.grid-2{grid-template-columns:1fr 1fr}}
+.stat{font-size:1.6rem;font-weight:700}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.82rem;gap:10px}
+.row:last-child{border-bottom:none}
+button{font-family:inherit;font-size:.78rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:#20242e;color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--blue)}
+button.approve{background:var(--green);color:#06250f;border:none}
+button:disabled{opacity:.4;cursor:default}
+input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:.8rem}
+#auth-screen{max-width:320px;margin:100px auto;text-align:center}
+#auth-screen input{width:100%;margin-bottom:8px}
+.hidden{display:none !important}
+.pill{font-size:.68rem;padding:2px 8px;border-radius:999px;background:#20242e}
+.pill.green{color:var(--green)}
+.pill.amber{color:var(--amber)}
+.pill.red{color:var(--red)}
+.kanban{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;overflow-x:auto;font-size:.76rem}
+.col{background:#20242e;border-radius:6px;padding:6px}
+.col h3{font-size:.7rem;color:var(--dim);margin:0 0 4px}
+.cc{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:5px;margin-bottom:5px}
+.cc.flag{border-color:var(--red)}
+.ledger-item{font-size:.76rem;padding:5px 0;border-bottom:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div id="auth-screen" class="card">
+  <h1>ODIN // ADMIN</h1>
+  <p class="sub">Sign in</p>
+  <input id="authEmail" type="email" placeholder="email" value="odinyeo5@gmail.com">
+  <input id="authPw" type="password" placeholder="password">
+  <button id="authBtn" style="width:100%">Sign In</button>
+  <p id="authErr" class="sub" style="color:var(--red)"></p>
+</div>
+
+<div id="app" class="hidden">
+<h1>ODIN // SERENE TRACKER — ADMIN</h1>
+<p class="sub">Overview &middot; <button id="signoutBtn">Sign out</button></p>
+
+<div class="grid grid-3">
+  <div class="card"><h2>Points</h2><div class="stat" id="ovPoints">0</div></div>
+  <div class="card"><h2>Streak</h2><div class="stat" id="ovStreak">0d</div><div class="sub" id="ovMult"></div></div>
+  <div class="card"><h2>Touchpoint Challenge</h2><div class="stat" id="ovTouchpoint">0/50</div></div>
+</div>
+
+<div class="card">
+  <h2>Pending Approval</h2>
+  <div id="approvalWrap"><p class="sub">Loading…</p></div>
+</div>
+
+<div class="card">
+  <h2>Weekly Summary (last 7 logged days)</h2>
+  <div id="weeklyWrap"></div>
+</div>
+
+<div class="card">
+  <h2>Pipeline (activity context)</h2>
+  <div class="kanban" id="kanbanWrap"></div>
+</div>
+
+<div class="card">
+  <h2>Manual Point Adjustment</h2>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="adjAmount" type="number" placeholder="+/- points" style="width:120px">
+    <input id="adjReason" placeholder="reason" style="flex:1">
+    <button id="adjBtn">Apply</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Recent Ledger</h2>
+  <div id="ledgerWrap"></div>
+</div>
+
+</div>
+
+<script type="module">
+import {
+  initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
+  pingOdin
+} from "./shared.js";
+
+const { auth, db } = initFirebase();
+const stateRef = doc(db, "meta", "state");
+
+const PIPELINE_STAGES = [
+  { key: 'prospect', label: 'Prospect' }, { key: 'open', label: 'Open' },
+  { key: 'proposed', label: 'Proposed' }, { key: 'closed', label: 'Closed' }, { key: 'inforced', label: 'Inforced' }
+];
+
+document.getElementById('authBtn').addEventListener('click', async () => {
+  const email = document.getElementById('authEmail').value.trim();
+  const pw = document.getElementById('authPw').value;
+  try { await signInWithEmailAndPassword(auth, email, pw); }
+  catch(e){ document.getElementById('authErr').textContent = e.message; }
+});
+document.getElementById('signoutBtn').addEventListener('click', () => signOut(auth));
+
+let state = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('adjBtn').addEventListener('click', applyManualAdjustment);
+    onSnapshot(stateRef, (snap) => {
+      if(!snap.exists()) return;
+      state = snap.data();
+      renderOverview(); renderApprovals(); renderWeekly(); renderPipeline();
+    });
+    const ledgerQ = query(collection(db, "pointsLedger"), orderBy("ts", "desc"), limit(25));
+    onSnapshot(ledgerQ, (snap) => renderLedger(snap.docs.map(d => d.data())));
+  } else {
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+  }
+});
+
+function renderOverview(){
+  document.getElementById('ovPoints').textContent = state.points.total;
+  document.getElementById('ovStreak').textContent = state.points.streakDays + 'd';
+  document.getElementById('ovMult').textContent = state.points.multiplier + 'x multiplier';
+  document.getElementById('ovTouchpoint').textContent = `${state.touchpointChallenge.count}/50`;
+}
+
+// "Pending approval" covers today (if submitted, not yet approved) plus any
+// recent dayHistory entries that were submitted but never got approved
+// before the day rolled over.
+function renderApprovals(){
+  const wrap = document.getElementById('approvalWrap');
+  const items = [];
+  const t = state.today;
+  if(t.submittedForApproval && t.approval.status === 'pending'){
+    items.push({ date: t.date, live: true, quests: t.quests.filter(q => q.status === 'completed').length,
+      energy: t.energy, touchpoint: t.touchpoint.logged, exercise: t.exercise });
+  }
+  (state.dayHistory || []).slice(0, 10).forEach(d => {
+    if(d.submitted && d.approval === 'pending'){
+      items.push({ date: d.date, live: false, quests: d.questsDone, energy: d.energy,
+        touchpoint: d.touchpoint, exercise: { logged: d.exercise, approved: d.exerciseApproved } });
+    }
+  });
+  if(!items.length){ wrap.innerHTML = '<p class="sub">Nothing pending.</p>'; return; }
+  wrap.innerHTML = items.map(it => `
+    <div class="row">
+      <span>${it.date} — quests ${it.quests}/3, energy ${it.energy || '—'}, touchpoint ${it.touchpoint ? '✓' : '—'}, exercise ${it.exercise.logged ? it.exercise.approved : '—'}</span>
+      <span>
+        ${it.exercise.logged && it.exercise.approved === 'pending' ? `<button class="approve" data-exapprove="${it.date}" data-live="${it.live}">Approve exercise</button>` : ''}
+        <button class="approve" data-approve="${it.date}" data-live="${it.live}">Approve day</button>
+      </span>
+    </div>`).join('');
+  items.forEach(it => {
+    const b = wrap.querySelector(`[data-approve="${it.date}"]`);
+    if(b) b.onclick = () => approveDay(it.date, it.live);
+    const eb = wrap.querySelector(`[data-exapprove="${it.date}"]`);
+    if(eb) eb.onclick = () => approveExercise(it.date, it.live);
+  });
+}
+
+async function approveDay(dateStr, live){
+  if(live){
+    await updateDoc(stateRef, { 'today.approval': { status: 'approved', approvedBy: 'odin', approvedAt: new Date().toISOString() } });
+  } else {
+    const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, approval: 'approved' } : d);
+    await updateDoc(stateRef, { dayHistory });
+  }
+  pingOdin(`✅ Odin approved <b>${dateStr}</b>.`);
+}
+async function approveExercise(dateStr, live){
+  if(live){
+    await updateDoc(stateRef, { 'today.exercise': { ...state.today.exercise, approved: 'approved' } });
+  } else {
+    const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, exerciseApproved: 'approved' } : d);
+    await updateDoc(stateRef, { dayHistory });
+  }
+}
+
+function renderWeekly(){
+  const days = [state.today, ...(state.dayHistory || []).slice(0, 6)];
+  const submitted = days.filter(d => d.submittedForApproval || d.submitted).length;
+  const quests = days.reduce((s, d) => s + (d.quests ? d.quests.filter(q => q.status === 'completed').length : (d.questsDone || 0)), 0);
+  const touchpoints = days.filter(d => (d.touchpoint && d.touchpoint.logged) || d.touchpoint === true).length;
+  const exercises = days.filter(d => (d.exercise && d.exercise.approved === 'approved') || d.exerciseApproved === 'approved').length;
+  document.getElementById('weeklyWrap').innerHTML = `
+    <div class="row"><span>Days submitted (last 7)</span><span>${submitted}/7</span></div>
+    <div class="row"><span>Quests completed</span><span>${quests}</span></div>
+    <div class="row"><span>Touchpoints logged</span><span>${touchpoints}</span></div>
+    <div class="row"><span>Exercise sessions approved</span><span>${exercises}</span></div>
+  `;
+}
+
+function renderPipeline(){
+  const wrap = document.getElementById('kanbanWrap');
+  wrap.innerHTML = PIPELINE_STAGES.map(stage => {
+    const cases = (state.pipeline.cases || []).filter(c => c.stage === stage.key);
+    return `<div class="col"><h3>${stage.label}</h3>${cases.map(c =>
+      `<div class="cc ${c.revisit ? 'flag' : ''}">${escapeHtml(c.client || '—')}${c.caseName ? ' / ' + escapeHtml(c.caseName) : ''}${c.fyc ? ` ($${c.fyc})` : ''}</div>`
+    ).join('')}</div>`;
+  }).join('');
+}
+
+function renderLedger(items){
+  document.getElementById('ledgerWrap').innerHTML = items.map(item => {
+    const cls = item.amount > 0 ? 'green' : item.amount < 0 ? 'red' : 'amber';
+    return `<div class="ledger-item"><span class="pill ${cls}">${item.type}</span> ${escapeHtml(item.reason)} ${item.amount ? `(${item.amount > 0 ? '+' : ''}${item.amount})` : ''} — ${item.date}</div>`;
+  }).join('') || '<p class="sub">No entries yet.</p>';
+}
+
+async function applyManualAdjustment(){
+  const amount = Number(document.getElementById('adjAmount').value);
+  const reason = document.getElementById('adjReason').value.trim() || 'Manual adjustment by Odin';
+  if(!amount) return;
+  await updateDoc(stateRef, { 'points.total': state.points.total + amount });
+  await addDoc(collection(db, "pointsLedger"), {
+    ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'penalty', amount, reason,
+    date: new Date().toISOString().slice(0,10), pingSent: false
+  });
+  document.getElementById('adjAmount').value = '';
+  document.getElementById('adjReason').value = '';
+}
+
+function escapeHtml(s){ return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+</body>
+</html>
