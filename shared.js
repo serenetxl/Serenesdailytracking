@@ -15,6 +15,9 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
   collection, addDoc, query, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 export * from "./engine.js";
 import { FIREBASE_CONFIG } from "./engine.js";
@@ -65,13 +68,27 @@ import { FIREBASE_CONFIG } from "./engine.js";
 // ----------------------------------------------------------------------------
 // Firebase bootstrap — call once per page.
 // ----------------------------------------------------------------------------
-let _app, _auth, _db;
+let _app, _auth, _db, _storage;
 export function initFirebase() {
-  if (_app) return { app: _app, auth: _auth, db: _db };
+  if (_app) return { app: _app, auth: _auth, db: _db, storage: _storage };
   _app = initializeApp(FIREBASE_CONFIG);
   _auth = getAuth(_app);
   _db = getFirestore(_app);
-  return { app: _app, auth: _auth, db: _db };
+  _storage = getStorage(_app);
+  return { app: _app, auth: _auth, db: _db, storage: _storage };
 }
 export { signInWithEmailAndPassword, onAuthStateChanged, signOut };
 export { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp };
+export { ref, uploadBytes, getDownloadURL };
+
+// Uploads a proof photo to Storage under <folder>/<date>-<random>.<ext> and
+// returns its public download URL. Call with the File from an <input
+// type="file"> change event. folder is e.g. "exercise-proof" or
+// "touchpoint-proof".
+export async function uploadProofPhoto(storage, folder, dateStr, file) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${folder}/${dateStr}-${Date.now()}.${ext}`;
+  const fileRef = ref(storage, path);
+  await uploadBytes(fileRef, file);
+  return getDownloadURL(fileRef);
+}

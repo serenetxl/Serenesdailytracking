@@ -59,6 +59,11 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
   <div class="card"><h2>Touchpoint Challenge</h2><div class="stat" id="ovTouchpoint">0/50</div></div>
 </div>
 
+<div class="grid grid-2">
+  <div class="card"><h2>IDA Goal (FYCC)</h2><div class="stat" id="ovGoal">$0 / $0</div></div>
+  <div class="card"><h2>Total FYC Opened</h2><div class="stat" id="ovFycOpened">$0</div><div class="sub">Proposed stage, awaiting close</div></div>
+</div>
+
 <div class="card">
   <h2>Pending Approval</h2>
   <div id="approvalWrap"><p class="sub">Loading…</p></div>
@@ -133,11 +138,18 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+function fycOpenedTotal(){
+  return (state.pipeline.cases || []).filter(c => c.stage === 'proposed' && !c.revisit)
+    .reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+}
+
 function renderOverview(){
   document.getElementById('ovPoints').textContent = state.points.total;
   document.getElementById('ovStreak').textContent = state.points.streakDays + 'd';
   document.getElementById('ovMult').textContent = state.points.multiplier + 'x multiplier';
   document.getElementById('ovTouchpoint').textContent = `${state.touchpointChallenge.count}/50`;
+  document.getElementById('ovGoal').textContent = `$${(state.goal.currentFYCC||0).toLocaleString()} / $${(state.goal.targetFYCC||0).toLocaleString()}`;
+  document.getElementById('ovFycOpened').textContent = `$${fycOpenedTotal().toLocaleString()}`;
 }
 
 // "Pending approval" covers today (if submitted, not yet approved) plus any
@@ -149,19 +161,24 @@ function renderApprovals(){
   const t = state.today;
   if(t.submittedForApproval && t.approval.status === 'pending'){
     items.push({ date: t.date, live: true, quests: t.quests.filter(q => q.status === 'completed').length,
-      energy: t.energy, touchpoint: t.touchpoint.logged, exercise: t.exercise });
+      energy: t.energy, touchpoint: t.touchpoint, exercise: t.exercise });
   }
   (state.dayHistory || []).slice(0, 10).forEach(d => {
     if(d.submitted && d.approval === 'pending'){
       items.push({ date: d.date, live: false, quests: d.questsDone, energy: d.energy,
-        touchpoint: d.touchpoint, exercise: { logged: d.exercise, approved: d.exerciseApproved } });
+        touchpoint: { logged: d.touchpoint, approved: d.touchpointApproved, photoUrl: d.touchpointPhotoUrl },
+        exercise: { logged: d.exercise, approved: d.exerciseApproved, photoUrl: d.exercisePhotoUrl } });
     }
   });
   if(!items.length){ wrap.innerHTML = '<p class="sub">Nothing pending.</p>'; return; }
   wrap.innerHTML = items.map(it => `
     <div class="row">
-      <span>${it.date} — quests ${it.quests}/3, energy ${it.energy || '—'}, touchpoint ${it.touchpoint ? '✓' : '—'}, exercise ${it.exercise.logged ? it.exercise.approved : '—'}</span>
+      <span>${it.date} — quests ${it.quests}/3, energy ${it.energy || '—'}<br>
+        touchpoint ${it.touchpoint.logged ? it.touchpoint.approved : '—'}${it.touchpoint.logged ? (it.touchpoint.photoUrl ? ` · <a href="${it.touchpoint.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>') : ''}<br>
+        exercise ${it.exercise.logged ? it.exercise.approved : '—'}${it.exercise.logged ? (it.exercise.photoUrl ? ` · <a href="${it.exercise.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>') : ''}
+      </span>
       <span>
+        ${it.touchpoint.logged && it.touchpoint.approved === 'pending' ? `<button class="approve" data-tpapprove="${it.date}" data-live="${it.live}">Approve touchpoint</button>` : ''}
         ${it.exercise.logged && it.exercise.approved === 'pending' ? `<button class="approve" data-exapprove="${it.date}" data-live="${it.live}">Approve exercise</button>` : ''}
         <button class="approve" data-approve="${it.date}" data-live="${it.live}">Approve day</button>
       </span>
@@ -171,6 +188,8 @@ function renderApprovals(){
     if(b) b.onclick = () => approveDay(it.date, it.live);
     const eb = wrap.querySelector(`[data-exapprove="${it.date}"]`);
     if(eb) eb.onclick = () => approveExercise(it.date, it.live);
+    const tb = wrap.querySelector(`[data-tpapprove="${it.date}"]`);
+    if(tb) tb.onclick = () => approveTouchpoint(it.date, it.live);
   });
 }
 
@@ -188,6 +207,14 @@ async function approveExercise(dateStr, live){
     await updateDoc(stateRef, { 'today.exercise': { ...state.today.exercise, approved: 'approved' } });
   } else {
     const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, exerciseApproved: 'approved' } : d);
+    await updateDoc(stateRef, { dayHistory });
+  }
+}
+async function approveTouchpoint(dateStr, live){
+  if(live){
+    await updateDoc(stateRef, { 'today.touchpoint': { ...state.today.touchpoint, approved: 'approved' } });
+  } else {
+    const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, touchpointApproved: 'approved' } : d);
     await updateDoc(stateRef, { dayHistory });
   }
 }
@@ -210,8 +237,12 @@ function renderPipeline(){
   const wrap = document.getElementById('kanbanWrap');
   wrap.innerHTML = PIPELINE_STAGES.map(stage => {
     const cases = (state.pipeline.cases || []).filter(c => c.stage === stage.key);
-    return `<div class="col"><h3>${stage.label}</h3>${cases.map(c =>
-      `<div class="cc ${c.revisit ? 'flag' : ''}">${escapeHtml(c.client || '—')}${c.caseName ? ' / ' + escapeHtml(c.caseName) : ''}${c.fyc ? ` ($${c.fyc})` : ''}</div>`
+    const flaggedCount = cases.filter(c => c.revisit).length;
+    const subtotal = cases.filter(c => !c.revisit).reduce((s, c) => s + (Number(c.fyc) || 0), 0);
+    return `<div class="col"><h3>${stage.label}</h3>
+      <div class="sub" style="margin-bottom:6px">${cases.length} &middot; $${subtotal.toLocaleString()}${flaggedCount ? ` (${flaggedCount} flagged)` : ''}</div>
+      ${cases.map(c =>
+      `<div class="cc ${c.revisit ? 'flag' : ''}">${escapeHtml(c.client || '—')}${c.caseName ? ' / ' + escapeHtml(c.caseName) : ''}${c.fyc ? ` ($${Number(c.fyc).toLocaleString()})` : ''}</div>`
     ).join('')}</div>`;
   }).join('');
 }

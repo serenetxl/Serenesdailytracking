@@ -495,6 +495,24 @@
       <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
     </div>
 
+    <!-- Points & Streak (clear, standalone — not just the header badge) -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">⭐</span>Points &amp; Streak</div>
+      </div>
+      <div class="tp-ex-grid">
+        <div>
+          <div class="stat-name">POINTS AVAILABLE TO SPEND</div>
+          <div class="mini-stat" id="pointsBig">0 pts</div>
+        </div>
+        <div>
+          <div class="stat-name">CURRENT STREAK</div>
+          <div class="mini-stat" id="streakBig">0 days</div>
+          <div class="empty-note" style="padding:0" id="streakMultNote"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Unfinished from yesterday -->
     <div class="card" id="unfinishedCard" style="display:none;">
       <div class="card-head">
@@ -573,12 +591,16 @@
         <div>
           <div class="stat-name">TOUCHPOINT (NOT VIA TEXT) · CHALLENGE</div>
           <div class="mini-stat"><span id="touchpointCount">0</span> / 50</div>
+          <input type="file" id="touchpointPhotoInput" accept="image/*" style="display:block;margin-bottom:8px;font-size:12px">
           <button class="ghost-btn" id="touchpointBtn">Log a touchpoint today</button>
+          <div class="empty-note" style="padding:6px 0 0" id="touchpointPhotoNote"></div>
         </div>
         <div>
           <div class="stat-name">EXERCISE SESSION</div>
           <div class="mini-stat" id="exerciseStatusLine">Not logged today</div>
+          <input type="file" id="exercisePhotoInput" accept="image/*" style="display:block;margin-bottom:8px;font-size:12px">
           <button class="ghost-btn" id="exerciseBtn">Log exercise (Odin approves)</button>
+          <div class="empty-note" style="padding:6px 0 0" id="exercisePhotoNote"></div>
         </div>
       </div>
     </div>
@@ -686,10 +708,10 @@ import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
   settleDay, redeemReward, refreshRewardItems, logTouchpoint, pingOdin,
-  DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE
+  DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
 } from "./shared.js";
 
-const { auth, db } = initFirebase();
+const { auth, db, storage } = initFirebase();
 const stateRef = doc(db, "meta", "state");
 
 const DAILY_TEMPLATE = [
@@ -776,8 +798,8 @@ function defaultToday(dateStr){
     quests: defaultQuests(),
     energy: null,
     timer: defaultTimer(),
-    touchpoint: { logged: false },
-    exercise: { logged: false, approved: 'none' },
+    touchpoint: { logged: false, photoUrl: null, approved: 'none' },
+    exercise: { logged: false, approved: 'none', photoUrl: null },
     submittedForApproval: false,
     approval: { status: 'none' }
   };
@@ -874,7 +896,7 @@ async function checkDailyReset(){
       const anyUpdatePosted = checklistDone > 0 || questsDone > 0 || !!t.energy || t.touchpoint.logged;
       const { points: newPoints, events } = settleDay(state.points, {
         date: t.date, questsCompleted: questsDone, totalQuests: 3,
-        touchpointLogged: t.touchpoint.logged, exerciseApproved: t.exercise.approved === 'approved',
+        touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
         anyUpdatePosted, streakKeeperSpent: false
       });
       state.points = newPoints;
@@ -891,8 +913,8 @@ async function checkDailyReset(){
       state.dayHistory.unshift({
         date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE.length,
         questsDone, questsTotal: 3, energy: t.energy,
-        touchpoint: t.touchpoint.logged, exercise: t.exercise.logged,
-        exerciseApproved: t.exercise.approved,
+        touchpoint: t.touchpoint.logged, touchpointApproved: t.touchpoint.approved, touchpointPhotoUrl: t.touchpoint.photoUrl || null,
+        exercise: t.exercise.logged, exerciseApproved: t.exercise.approved, exercisePhotoUrl: t.exercise.photoUrl || null,
         submitted: t.submittedForApproval, approval: t.approval.status
       });
     }
@@ -1002,11 +1024,16 @@ function renderHeader(){
   document.getElementById('todayLabel').textContent = d.toLocaleDateString('en-SG', opts);
 }
 
-/* ---------- Points badge ---------- */
+/* ---------- Points badge + standalone Points & Streak card ---------- */
 function renderPointsBadge(){
   document.getElementById('pointsTotal').textContent = state.points.total;
   document.getElementById('streakDays').textContent = state.points.streakDays;
   document.getElementById('streakMult').textContent = state.points.multiplier + 'x';
+  document.getElementById('pointsBig').textContent = state.points.total + ' pts';
+  document.getElementById('streakBig').textContent = state.points.streakDays + (state.points.streakDays === 1 ? ' day' : ' days');
+  document.getElementById('streakMultNote').textContent = state.points.multiplier > 1
+    ? `${state.points.multiplier}x multiplier on new points earned`
+    : 'Hit 7 days streak for a 1.5x multiplier';
 }
 
 /* ---------- IDA Goal ---------- */
@@ -1476,26 +1503,60 @@ function wireEnergy(){
 function renderTouchpointExercise(){
   document.getElementById('touchpointCount').textContent = state.touchpointChallenge.count;
   const tpBtn = document.getElementById('touchpointBtn');
+  const tpPhotoInput = document.getElementById('touchpointPhotoInput');
   tpBtn.disabled = state.today.touchpoint.logged;
-  tpBtn.textContent = state.today.touchpoint.logged ? 'Logged for today ✓' : 'Log a touchpoint today';
+  tpPhotoInput.disabled = state.today.touchpoint.logged;
+  tpBtn.textContent = state.today.touchpoint.logged
+    ? (state.today.touchpoint.approved === 'approved' ? 'Logged — approved ✓' : state.today.touchpoint.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
+    : 'Log a touchpoint today';
+  document.getElementById('touchpointPhotoNote').textContent = state.today.touchpoint.photoUrl ? 'Photo attached ✓' : '';
   const exLine = document.getElementById('exerciseStatusLine');
   exLine.textContent = state.today.exercise.logged
     ? (state.today.exercise.approved === 'approved' ? 'Logged — approved ✓' : state.today.exercise.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
     : 'Not logged today';
   const exBtn = document.getElementById('exerciseBtn');
+  const exPhotoInput = document.getElementById('exercisePhotoInput');
   exBtn.disabled = state.today.exercise.logged;
+  exPhotoInput.disabled = state.today.exercise.logged;
+  document.getElementById('exercisePhotoNote').textContent = state.today.exercise.photoUrl ? 'Photo attached ✓' : '';
 }
 function wireTouchpointExercise(){
-  document.getElementById('touchpointBtn').addEventListener('click', () => {
-    state.today.touchpoint.logged = true;
+  document.getElementById('touchpointBtn').addEventListener('click', async () => {
+    const fileInput = document.getElementById('touchpointPhotoInput');
+    const file = fileInput.files[0];
+    state.today.touchpoint = { logged: true, approved: 'pending', photoUrl: null };
     state.touchpointChallenge = logTouchpoint(state.touchpointChallenge);
     saveState(); renderTouchpointExercise();
-    showToast('Touchpoint logged');
+    showToast(file ? 'Touchpoint logged — uploading photo…' : 'Touchpoint logged — pending Odin (no photo attached)');
+    if(file){
+      try{
+        const url = await uploadProofPhoto(storage, 'touchpoint-proof', state.today.date, file);
+        state.today.touchpoint.photoUrl = url;
+        saveState(); renderTouchpointExercise();
+        showToast('Photo uploaded');
+      }catch(e){
+        console.error('Photo upload failed', e);
+        showToast('Photo upload failed — touchpoint still logged, add proof later if needed');
+      }
+    }
   });
-  document.getElementById('exerciseBtn').addEventListener('click', () => {
-    state.today.exercise = { logged: true, approved: 'pending' };
+  document.getElementById('exerciseBtn').addEventListener('click', async () => {
+    const fileInput = document.getElementById('exercisePhotoInput');
+    const file = fileInput.files[0];
+    state.today.exercise = { logged: true, approved: 'pending', photoUrl: null };
     saveState(); renderTouchpointExercise();
-    showToast('Exercise logged — pending Odin');
+    showToast(file ? 'Exercise logged — uploading photo…' : 'Exercise logged — pending Odin (no photo attached)');
+    if(file){
+      try{
+        const url = await uploadProofPhoto(storage, 'exercise-proof', state.today.date, file);
+        state.today.exercise.photoUrl = url;
+        saveState(); renderTouchpointExercise();
+        showToast('Photo uploaded');
+      }catch(e){
+        console.error('Photo upload failed', e);
+        showToast('Photo upload failed — exercise still logged, add proof later if needed');
+      }
+    }
   });
 }
 
@@ -1560,7 +1621,7 @@ async function submitDay(){
 
   const { points: newPoints, events } = settleDay(state.points, {
     date: t.date, questsCompleted, totalQuests,
-    touchpointLogged: t.touchpoint.logged, exerciseApproved: t.exercise.approved === 'approved',
+    touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
     anyUpdatePosted, streakKeeperSpent
   });
   state.points = newPoints;
