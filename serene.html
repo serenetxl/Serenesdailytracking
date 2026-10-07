@@ -490,9 +490,15 @@
     </div>
 
     <!-- Total FYC Opened (Proposed pipeline value) -->
-    <div class="card fyc-opened-card">
-      <div class="fyc-opened-label">Total FYC Opened <span class="fyc-opened-sub">(proposed, awaiting close)</span></div>
-      <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
+    <div class="card fyc-opened-card" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div class="fyc-opened-label">FYC Opened <span class="fyc-opened-sub">(proposed)</span></div>
+        <div class="fyc-opened-value" id="fycOpenedValue">$0</div>
+      </div>
+      <div>
+        <div class="fyc-opened-label">FYC Submitted <span class="fyc-opened-sub">(closed)</span></div>
+        <div class="fyc-opened-value" id="fycSubmittedValue" style="color:var(--teal);">$0</div>
+      </div>
     </div>
 
     <!-- Unfinished from yesterday -->
@@ -547,7 +553,6 @@
     <div class="card">
       <div class="card-head">
         <div class="card-title"><span class="icon">◈</span>Weekly Stats</div>
-        <button class="edit-btn" id="weekEditToggle" title="Edit targets">✎ Edit</button>
       </div>
       <div class="stat-grid" id="statGrid"></div>
     </div>
@@ -729,9 +734,10 @@ const DAILY_TEMPLATE = [
 
 const STAT_DEFS = [
   { key: 'appointments', label: 'Appointments' },
-  { key: 'followups',    label: 'Follow-ups' },
-  { key: 'fycc',         label: 'FYCC Earned', isMoney: true, targetComputed: true },
-  { key: 'exercise',     label: 'Exercise Sessions' }
+  // key stays 'followups' so existing week history keeps working; it's now
+  // weekly touchpoints with clients/prospects (not the 50-day challenge).
+  { key: 'followups',    label: 'Touchpoints (clients / prospects)' },
+  { key: 'fycc',         label: 'FYCC Earned', isMoney: true, targetComputed: true }
 ];
 
 const PIPELINE_STAGES = [
@@ -791,7 +797,7 @@ function weeklyFyccTarget(fromMondayStr){
   return Math.ceil(gap / weeksLeftToDeadline(fromMondayStr));
 }
 function emptyStats(){ const o = {}; STAT_DEFS.forEach(s => o[s.key] = 0); return o; }
-function defaultTargets(){ return { appointments:8, followups:5, exercise:3 }; }
+function defaultTargets(){ return { appointments:8, followups:10 }; }
 
 function defaultToday(dateStr){
   return {
@@ -800,6 +806,7 @@ function defaultToday(dateStr){
     quests: defaultQuests(),
     energy: null,
     journal: { text: '', updatedAt: null },
+    agendaPinged: false,
     timer: defaultTimer(),
     touchpoint: { logged: false, photoUrl: null, approved: 'none' },
     exercise: { logged: false, approved: 'none', photoUrl: null },
@@ -841,6 +848,16 @@ function normalizeQuest(q, index){
   };
 }
 
+// One-off migration: exercise has its own tracker now so it leaves the weekly
+// targets, and touchpoints with clients/prospects moves from the old default
+// of 5 to 10. A target she set to anything other than 5 is left alone.
+function migrateWeeklyTargets(t){
+  const out = { ...t };
+  delete out.exercise;
+  if(out.followups === 5) out.followups = 10;
+  return out;
+}
+
 // Union existing reward items (preserving their live qty/cost/edits) with any
 // new items added to DEFAULT_REWARD_ITEMS since this doc was first created,
 // so a code update that adds reward items doesn't require a manual migration.
@@ -870,7 +887,7 @@ function mergeWithDefaults(parsed){
   return {
     ...base, ...parsed,
     goal: { ...base.goal, ...(parsed.goal||{}) },
-    weeklyTargets: { ...base.weeklyTargets, ...(parsed.weeklyTargets||{}) },
+    weeklyTargets: migrateWeeklyTargets({ ...base.weeklyTargets, ...(parsed.weeklyTargets||{}) }),
     currentWeek: { ...base.currentWeek, ...(parsed.currentWeek||{}), stats: { ...base.currentWeek.stats, ...((parsed.currentWeek||{}).stats||{}) } },
     today: mergedToday,
     weekHistory: parsed.weekHistory || [],
@@ -925,7 +942,8 @@ async function checkDailyReset(){
     // incomplete day so points/streak/pings still happen even if she never
     // opened the app to hit "Submit Day".
     if(!t.submittedForApproval){
-      const anyUpdatePosted = checklistDone > 0 || questsDone > 0 || !!t.energy || t.touchpoint.logged;
+      // Work dailies are her own private system — they don't count as an update to Odin.
+      const anyUpdatePosted = questsDone > 0 || !!t.energy || t.touchpoint.logged;
       const { points: newPoints, events } = settleDay(state.points, {
         date: t.date, questsCompleted: questsDone, totalQuests: 3,
         touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
@@ -974,7 +992,7 @@ function checkWeeklyReset(){
       const start = parseDate(w.weekStart);
       const end = new Date(start); end.setDate(end.getDate() + 6);
       const targets = { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) };
-      const metAllTargets = Object.keys(targets).every(key => (w.stats[key] || 0) >= targets[key]);
+      const metAllTargets = ['appointments', 'followups', 'fycc'].every(key => (w.stats[key] || 0) >= (targets[key] || 0));
       state.weekHistory.unshift({
         weekStart: w.weekStart, weekEnd: fmtDate(end), stats: w.stats,
         targets, metAllTargets
@@ -1156,6 +1174,20 @@ function undoCompleteQuest(i){
   showToast('Undone');
 }
 
+// Tells Odin the day's 3 agenda items are set — once per day, only when all
+// three have text. today.agendaPinged is reset by defaultToday() each morning.
+function maybePingAgenda(){
+  const t = state.today;
+  if(t.agendaPinged) return;
+  const items = t.quests.map(q => (q.text || '').trim());
+  if(items.some(x => !x)) return;
+  t.agendaPinged = true;
+  saveState();
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  pingOdin(`📋 Serene's agenda for <b>${t.date}</b>:\n1. ${esc(items[0])} (main)\n2. ${esc(items[1])}\n3. ${esc(items[2])}`);
+  showToast('Agenda sent to Odin');
+}
+
 function renderQuests(){
   const wrap = document.getElementById('questsList');
   wrap.innerHTML = '';
@@ -1189,6 +1221,9 @@ function renderQuests(){
       saveState();
       if(i === 0 && input.value.trim()) dismissTimerBanner();
     });
+    // 'change' fires when she leaves the field, so the ping goes out once the
+    // third agenda item is actually written, not mid-keystroke.
+    input.addEventListener('change', maybePingAgenda);
     top.appendChild(input);
     row.appendChild(top);
 
@@ -1486,7 +1521,6 @@ function wireTimer(){
 }
 
 /* ---------- Weekly Stats ---------- */
-let weekEditMode = false;
 function renderStats(){
   const grid = document.getElementById('statGrid');
   grid.innerHTML = '';
@@ -1514,29 +1548,29 @@ function renderStats(){
       note.textContent = `auto · gap ÷ ${weeksLeftToDeadline()}wk left`;
       card.appendChild(note);
     }
-    if(weekEditMode){
-      const controls = document.createElement('div'); controls.className = 'stat-controls';
-      const minus = document.createElement('button'); minus.className = 'stepper'; minus.textContent = '−';
-      minus.addEventListener('click', () => { state.currentWeek.stats[def.key] = Math.max(0, current - (def.isMoney ? 100 : 1)); saveState(); renderStats(); });
-      const plus = document.createElement('button'); plus.className = 'stepper'; plus.textContent = '+';
-      plus.addEventListener('click', () => { state.currentWeek.stats[def.key] = current + (def.isMoney ? 100 : 1); saveState(); renderStats(); });
-      controls.appendChild(minus); controls.appendChild(plus);
-      if(!def.targetComputed){
-        const targetInput = document.createElement('input');
-        targetInput.type = 'number'; targetInput.min = '0'; targetInput.value = target;
-        targetInput.style.cssText = 'width:64px;background:var(--card);border:1px solid var(--card-border);color:var(--ink);border-radius:6px;padding:4px 6px;font-family:var(--font-mono);font-size:12px;';
-        targetInput.addEventListener('change', () => { state.weeklyTargets[def.key] = Math.max(0, Number(targetInput.value) || 0); saveState(); renderStats(); });
-        const targetLabel = document.createElement('span');
-        targetLabel.style.cssText = 'font-size:10px;color:var(--ink-faint);font-family:var(--font-mono);align-self:center;';
-        targetLabel.textContent = 'target';
-        controls.appendChild(targetLabel); controls.appendChild(targetInput);
-      }
-      card.appendChild(controls);
+    // +/- are always on — no edit mode to toggle.
+    const controls = document.createElement('div'); controls.className = 'stat-controls';
+    const minus = document.createElement('button'); minus.className = 'stepper'; minus.textContent = '−';
+    minus.addEventListener('click', () => { state.currentWeek.stats[def.key] = Math.max(0, current - (def.isMoney ? 100 : 1)); saveState(); renderStats(); });
+    const plus = document.createElement('button'); plus.className = 'stepper'; plus.textContent = '+';
+    plus.addEventListener('click', () => { state.currentWeek.stats[def.key] = current + (def.isMoney ? 100 : 1); saveState(); renderStats(); });
+    controls.appendChild(minus); controls.appendChild(plus);
+    card.appendChild(controls);
+    // Targets are rarely changed, so rather than a whole edit mode, tap the
+    // target number itself to change it (FYCC's target is auto-computed).
+    if(!def.targetComputed){
+      tgt.style.cursor = 'pointer'; tgt.title = 'Tap to change target';
+      tgt.addEventListener('click', () => {
+        const next = prompt(`Weekly target for ${def.label}:`, target);
+        if(next === null) return;
+        state.weeklyTargets[def.key] = Math.max(0, Number(next) || 0);
+        saveState(); renderStats();
+      });
     }
     grid.appendChild(card);
   });
 }
-function wireStats(){ document.getElementById('weekEditToggle').addEventListener('click', () => { weekEditMode = !weekEditMode; renderStats(); }); }
+function wireStats(){ /* +/- are wired per render in renderStats() */ }
 
 /* ---------- Energy ---------- */
 function renderEnergy(){
@@ -1643,7 +1677,7 @@ function renderRewards(){
     if(streakGated){
       action = item.qty > 0
         ? `<button class="reward-btn" data-redeem="${item.id}">Redeem (free)</button>`
-        : `<span class="sub" style="margin:0">🔒 ${Math.min(weeksUnbroken, item.requiresWeeklyStreak)}/${item.requiresWeeklyStreak} weeks unbroken</span>`;
+        : `<span class="sub" style="margin:0">🔒 ${item.requiresWeeklyStreak} weekly streak · ${Math.min(weeksUnbroken, item.requiresWeeklyStreak)}/${item.requiresWeeklyStreak}</span>`;
     } else if(priceTBD){
       action = `<span class="sub" style="margin:0">ask Odin</span>`;
     } else {
@@ -1696,7 +1730,8 @@ async function submitDay(){
   const t = state.today;
   const questsCompleted = t.quests.filter(q => q.status === 'completed').length;
   const totalQuests = 3;
-  const anyUpdatePosted = t.checklist.some(Boolean) || questsCompleted > 0 || !!t.energy || t.touchpoint.logged;
+  // Work dailies are her own private system — they don't count as an update to Odin.
+  const anyUpdatePosted = questsCompleted > 0 || !!t.energy || t.touchpoint.logged;
   const allCleared = questsCompleted >= totalQuests;
 
   let streakKeeperSpent = false;
@@ -1735,7 +1770,13 @@ function genCaseId(){ return 'c' + Date.now().toString(36) + Math.random().toStr
 function fycOpenedTotal(){
   return state.pipeline.cases.filter(c => c.stage === 'proposed' && !c.revisit).reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
 }
-function renderFycOpened(){ document.getElementById('fycOpenedValue').textContent = '$' + fycOpenedTotal().toLocaleString('en-SG'); }
+function fycSubmittedTotal(){
+  return state.pipeline.cases.filter(c => c.stage === 'closed' && !c.revisit).reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+}
+function renderFycOpened(){
+  document.getElementById('fycOpenedValue').textContent = '$' + fycOpenedTotal().toLocaleString('en-SG');
+  document.getElementById('fycSubmittedValue').textContent = '$' + fycSubmittedTotal().toLocaleString('en-SG');
+}
 function toggleRevisit(caseId){
   const c = state.pipeline.cases.find(x => x.id === caseId);
   if(!c) return;
@@ -1907,13 +1948,13 @@ function renderHistory(){
     let rows = state.weekHistory.slice(0, 52).map(w => `
       <tr>
         <td>${w.weekStart} – ${w.weekEnd}</td>
-        <td>${w.stats.appointments||0}/${w.targets.appointments||0}</td>
-        <td>${w.stats.followups||0}/${w.targets.followups||0}</td>
+        <td>${w.stats.appointments||0}/${(w.targets||{}).appointments||0}</td>
+        <td>${w.stats.followups||0}/${(w.targets||{}).followups||0}</td>
         <td>$${(w.stats.fycc||0).toLocaleString('en-SG')}</td>
-        <td>${w.stats.exercise||0}</td>
+        <td>${w.metAllTargets === undefined ? '—' : (w.metAllTargets ? '✓' : '✗')}</td>
       </tr>`).join('');
     weekWrap.innerHTML = `<table class="hist-table">
-      <thead><tr><th>Week</th><th>Appts</th><th>Follow-ups</th><th>FYCC</th><th>Exercise</th></tr></thead>
+      <thead><tr><th>Week</th><th>Appts</th><th>Touchpoints</th><th>FYCC</th><th>Targets hit</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
 }

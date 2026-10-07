@@ -68,12 +68,12 @@ export const DAILY_TEMPLATE = [
 
 export const STAT_DEFS = [
   { key: "appointments", label: "Appointments", isMoney: false, targetComputed: false },
-  { key: "followups", label: "Follow-ups", isMoney: false, targetComputed: false },
+  { key: "followups", label: "Touchpoints (clients / prospects)", isMoney: false, targetComputed: false },
   { key: "fycc", label: "FYCC Earned", isMoney: true, targetComputed: true },
-  { key: "exercise", label: "Exercise Sessions", isMoney: false, targetComputed: false }
+  { key: "exercise", label: "Exercise (approved)", isMoney: false, targetComputed: false, derived: true }
 ];
 
-export const DEFAULT_WEEKLY_TARGETS = { appointments: 8, followups: 5, exercise: 4 };
+export const DEFAULT_WEEKLY_TARGETS = { appointments: 8, followups: 10, exercise: 3 };
 
 export const PIPELINE_STAGES = [
   { key: "prospect", label: "Prospect", sub: "to meet" },
@@ -169,7 +169,7 @@ export const DEFAULT_REWARD_ITEMS = [
     id: "hair-treatment", name: "Hair treatment", cost: 0,
     qty: 0, maxQty: 1, refreshRule: null, lastRefreshed: "2025-09-25",
     requiresWeeklyStreak: 10, cooldownMonths: 6,
-    description: "Capped at $300. Not bought with points — unlocks free once you've gone 10 straight weeks without breaking your daily or weekly streak, and at least 6 months since it was last used (last used 25 Sep 2025, so the cooldown is already clear — it's purely gated on the 10-week streak now)."
+    description: "Cost: 10 weekly streak (no daily or weekly streak broken). Capped at $300, once per 6 months."
   }
 ];
 
@@ -341,49 +341,89 @@ export function monthsBetween(a, b) {
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
 }
 
-// Consecutive unbroken weeks, counting back from the most recent (weekHistory
-// is newest-first via unshift). A week counts as "unbroken" only if every
-// weekly target was hit — see weekHistory entry's metAllTargets flag.
-export function computeWeeklyStreakWeeks(weekHistory) {
+// ---- Weekly streak (Monday-to-Sunday weeks) --------------------------------
+// A week is "unbroken" only if ALL of these hold for Mon..Sun:
+//   1. every one of the 7 days cleared the daily bar (all 3 quests) — or had a
+//      Streak Keeper spent on it. A day missing from dayHistory (nothing posted
+//      at all) counts as broken, so a streak can't start mid-week.
+//   2. appointments hit the weekly appointments target
+//   3. approved exercise sessions hit the weekly exercise target
+// Touchpoints and FYCC are tracked on the dashboard but don't gate the streak.
+
+function addDaysStr(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// Approved exercise sessions in the Mon..Sun week starting weekStart, counted
+// from the per-day proof tracker (today's live day + archived days) so a late
+// approval from Odin is picked up automatically.
+export function exerciseApprovedCount(weekStart, today, dayHistory) {
+  const dates = new Set(Array.from({ length: 7 }, (_, i) => addDaysStr(weekStart, i)));
   let n = 0;
+  if (today && dates.has(today.date) && today.exercise && today.exercise.approved === "approved") n++;
+  for (const d of (dayHistory || [])) {
+    if (dates.has(d.date) && d.exerciseApproved === "approved") n++;
+  }
+  return n;
+}
+
+// Re-evaluates one archived week against the day-by-day history.
+export function evaluateWeek(entry, dayHistory) {
+  const targets = { ...DEFAULT_WEEKLY_TARGETS, ...(entry.targets || {}) };
+  const byDate = new Map((dayHistory || []).map(d => [d.date, d]));
+  const dates = Array.from({ length: 7 }, (_, i) => addDaysStr(entry.weekStart, i));
+  const dailyOk = dates.every(dt => {
+    const d = byDate.get(dt);
+    return !!d && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
+  });
+  const exercise = dates.filter(dt => (byDate.get(dt) || {}).exerciseApproved === "approved").length;
+  const appointments = (entry.stats && entry.stats.appointments) || 0;
+  const metAllTargets = appointments >= targets.appointments && exercise >= targets.exercise;
+  return { dailyOk, exercise, appointments, metAllTargets, unbroken: dailyOk && metAllTargets };
+}
+
+// Refreshes every archived week's derived fields (exercise count, flags) from
+// dayHistory. Pure — returns a new array; call on load so late approvals count.
+export function reconcileWeekHistory(weekHistory, dayHistory) {
+  return (weekHistory || []).map(w => {
+    const ev = evaluateWeek(w, dayHistory);
+    return {
+      ...w,
+      stats: { ...(w.stats || {}), exercise: ev.exercise },
+      metAllTargets: ev.metAllTargets, dailyOk: ev.dailyOk, unbroken: ev.unbroken
+    };
+  });
+}
+
+// Consecutive unbroken weeks counting back from the most recent completed
+// week (weekHistory is newest-first). Weeks must be back-to-back Mondays, so a
+// missing week ends the run. Expects a reconciled weekHistory.
+export function computeWeeklyStreakWeeks(weekHistory) {
+  let n = 0, prev = null;
   for (const w of (weekHistory || [])) {
-    if (w.metAllTargets) n++; else break;
+    if (prev && addDaysStr(w.weekStart, 7) !== prev) break;
+    if (!w.unbroken) break;
+    n++; prev = w.weekStart;
   }
   return n;
 }
 
 /**
  * Unlocks/locks reward items gated on a weekly streak (e.g. the hair
- * treatment: 10 unbroken weeks, both daily AND weekly, plus a cooldown since
- * it was last used) rather than a points cost. Call alongside
- * refreshRewardItems() on load / daily reset / weekly reset — idempotent.
+ * treatment: 10 unbroken Mon-Sun weeks) rather than a points cost, subject to
+ * a cooldown since it was last used. Call alongside refreshRewardItems() on
+ * load / daily reset / weekly reset — idempotent. weekHistory must already be
+ * reconciled against dayHistory (see reconcileWeekHistory).
  */
-export function refreshConditionalRewards(rewardItems, pointsState, weekHistory, now = new Date()) {
+export function refreshConditionalRewards(rewardItems, weekHistory, now = new Date()) {
   const weeksUnbroken = computeWeeklyStreakWeeks(weekHistory);
   return rewardItems.map(item => {
     if (!item.requiresWeeklyStreak) return item;
     const cooldownOk = !item.lastRefreshed || monthsBetween(new Date(item.lastRefreshed), now) >= (item.cooldownMonths || 0);
-    // streakDays is the daily streak (settleDay's "all 3 quests cleared"
-    // counter) — requiring it to be at least requiresWeeklyStreak*7 days
-    // proves the daily side never broke across those same weeks.
-    const streakOk = pointsState.streakDays >= item.requiresWeeklyStreak * 7 && weeksUnbroken >= item.requiresWeeklyStreak;
-    const eligible = cooldownOk && streakOk;
+    const eligible = cooldownOk && weeksUnbroken >= item.requiresWeeklyStreak;
     if (eligible && item.qty < item.maxQty) return { ...item, qty: item.maxQty };
     if (!eligible && item.qty > 0) return { ...item, qty: 0 };
     return item;
   });
-}
-
-/**
- * Touchpoint challenge: 50-day cumulative counter, +1 per logged day.
- */
-export function logTouchpoint(challenge) {
-  const c = { ...challenge };
-  if (!c.startedAt) c.startedAt = new Date().toISOString().slice(0, 10);
-  c.count = Math.min(c.target, c.count + 1);
-  return c;
-}
-
-export function fmtDate(d) {
-  return d.toISOString().slice(0, 10);
 }

@@ -59,9 +59,10 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
   <div class="card"><h2>Touchpoint Challenge</h2><div class="stat" id="ovTouchpoint">0/50</div></div>
 </div>
 
-<div class="grid grid-2">
+<div class="grid grid-3">
   <div class="card"><h2>IDA Goal (FYCC)</h2><div class="stat" id="ovGoal">$0 / $0</div></div>
-  <div class="card"><h2>Total FYC Opened</h2><div class="stat" id="ovFycOpened">$0</div><div class="sub">Proposed stage, awaiting close</div></div>
+  <div class="card"><h2>FYC Opened</h2><div class="stat" id="ovFycOpened">$0</div><div class="sub">Proposed stage, awaiting close</div></div>
+  <div class="card"><h2>FYC Submitted</h2><div class="stat" id="ovFycSubmitted">$0</div><div class="sub">Closed stage, awaiting inforce</div></div>
 </div>
 
 <div class="card">
@@ -197,6 +198,11 @@ function fycOpenedTotal(){
     .reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
 }
 
+function fycSubmittedTotal(){
+  return (state.pipeline.cases || []).filter(c => c.stage === 'closed' && !c.revisit)
+    .reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
+}
+
 function renderOverview(){
   document.getElementById('ovPoints').textContent = state.points.total;
   document.getElementById('ovStreak').textContent = state.points.streakDays + 'd';
@@ -204,6 +210,7 @@ function renderOverview(){
   document.getElementById('ovTouchpoint').textContent = `${state.touchpointChallenge.count}/50`;
   document.getElementById('ovGoal').textContent = `$${(state.goal.currentFYCC||0).toLocaleString()} / $${(state.goal.targetFYCC||0).toLocaleString()}`;
   document.getElementById('ovFycOpened').textContent = `$${fycOpenedTotal().toLocaleString()}`;
+  document.getElementById('ovFycSubmitted').textContent = `$${fycSubmittedTotal().toLocaleString()}`;
 }
 
 // "Pending approval" covers today (if submitted, not yet approved) plus any
