@@ -882,7 +882,18 @@ function migrateWeeklyTargets(t){
 function mergeRewardItems(defaults, existing){
   if(!existing || !existing.length) return defaults.map(r => ({ ...r }));
   const byId = new Map(existing.map(r => [r.id, r]));
-  const merged = existing.map(r => ({ ...r }));
+  const merged = existing.map(r => {
+    // One-time upgrade: a streak-gated item (hair treatment) saved before it
+    // had its streak rule keeps its stock/cooldown date but takes the new
+    // rule, cost and wording. After that it's left alone, so edits Odin makes
+    // in his panel stick.
+    const def = defaults.find(d => d.id === r.id);
+    if(def && def.requiresWeeklyStreak && !r.requiresWeeklyStreak){
+      return { ...r, cost: def.cost, refreshRule: def.refreshRule, requiresWeeklyStreak: def.requiresWeeklyStreak,
+               cooldownMonths: def.cooldownMonths, maxQty: def.maxQty, description: def.description };
+    }
+    return { ...r };
+  });
   defaults.forEach(def => {
     if(!byId.has(def.id)) merged.push({ ...def });
   });
@@ -933,6 +944,12 @@ let resetIntervalId = null;
 async function loadState(){
   const snap = await getDoc(stateRef);
   const merged = mergeWithDefaults(snap.exists() ? snap.data() : null);
+  // If upgrading the saved data changed the reward list (e.g. the hair
+  // treatment rule above), write it back now so Odin's panel sees it too
+  // instead of waiting for the next edit.
+  if(snap.exists() && JSON.stringify(merged.rewardItems) !== JSON.stringify(snap.data().rewardItems)){
+    await setDoc(stateRef, merged);
+  }
   if(!snap.exists()){
     // First-ever load: nothing in Firestore yet. Write the defaults now so
     // the doc actually exists — otherwise the app looks fully loaded here
