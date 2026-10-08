@@ -501,10 +501,36 @@
       </div>
     </div>
 
+    <!-- Extra FYC goals / challenges (e.g. incentive campaigns with tiers) -->
+    <div class="card" id="fycGoalsCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">🎯</span>FYC Challenges</div>
+        <button class="edit-btn" id="fycGoalAddToggle">+ Add</button>
+      </div>
+      <div id="fycGoalForm" style="display:none;margin-bottom:14px;">
+        <div style="display:grid;gap:8px;">
+          <input id="fgName" type="text" placeholder="Name, e.g. 10K, I OK! 20K Sure OK!" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--card-border);font-family:inherit;box-sizing:border-box">
+          <textarea id="fgTiers" rows="4" placeholder="One tier per line, target = reward&#10;5k = $2,000&#10;10k = $4,000" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--card-border);font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <label style="font-size:11px;color:var(--ink-faint)">Starts<input id="fgStart" type="date" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--card-border);box-sizing:border-box"></label>
+            <label style="font-size:11px;color:var(--ink-faint)">Ends (optional)<input id="fgEnd" type="date" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--card-border);box-sizing:border-box"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <label style="font-size:11px;color:var(--ink-faint)">Counts FYC when a case is
+              <select id="fgBasis" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--card-border);box-sizing:border-box"><option value="submitted">Submitted (Closed)</option><option value="inforced">Inforced</option></select></label>
+            <label style="font-size:11px;color:var(--ink-faint)">Already clocked ($)<input id="fgCarried" type="number" min="0" placeholder="0" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--card-border);box-sizing:border-box"></label>
+          </div>
+          <div id="fgErr" style="color:var(--rose);font-size:12px"></div>
+          <button class="save-btn" id="fgSaveBtn">Save challenge</button>
+        </div>
+      </div>
+      <div id="fycGoalsList"></div>
+    </div>
+
     <!-- Unfinished from yesterday -->
     <div class="card" id="unfinishedCard" style="display:none;">
       <div class="card-head">
-        <div class="card-title"><span class="icon">↺</span>Unfinished From Yesterday</div>
+        <div class="card-title"><span class="icon">↺</span>Unfinished &amp; Moved Quests</div>
       </div>
       <div id="unfinishedList"></div>
     </div>
@@ -514,6 +540,7 @@
       <div class="card-head">
         <div class="card-title"><span class="icon">⚔</span>Today's 3 Quests</div>
       </div>
+      <div class="empty-note" style="padding:0 0 10px">All 3 are must-dos. Pick them to fit today's energy — Odin gets pinged once all 3 are set.</div>
       <div id="questsList"></div>
     </div>
 
@@ -727,8 +754,9 @@ window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
-  settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, computeWeeklyStreakWeeks,
+  settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, payWeeklyPoints, computeWeeklyStreakWeeks,
   reconcileWeekHistory, evaluateWeek, exerciseApprovedCount,
+  goalProgress, parseTiers, LEAGUE_CHALLENGE_GOAL,
   logTouchpoint, pingOdin,
   DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
 } from "./shared.js";
@@ -814,7 +842,7 @@ function weeklyFyccTarget(fromMondayStr){
   return Math.ceil(gap / weeksLeftToDeadline(fromMondayStr));
 }
 function emptyStats(){ const o = {}; STAT_DEFS.forEach(s => o[s.key] = 0); return o; }
-function defaultTargets(){ return { appointments:8, followups:10, exercise:3 }; }
+function defaultTargets(){ return { appointments:4, followups:10, exercise:3 }; }
 
 function defaultToday(dateStr){
   return {
@@ -843,6 +871,7 @@ function defaultState(){
     today: defaultToday(today),
     dayHistory: [],
     pipeline: { cases: [] },
+    fycGoals: [ JSON.parse(JSON.stringify(LEAGUE_CHALLENGE_GOAL)) ],
     pendingCarryover: [],
     questLog: [],
     points: { total: 0, streakDays: 0, multiplier: 1, lastDayProcessed: null },
@@ -872,6 +901,7 @@ function normalizeQuest(q, index){
 function migrateWeeklyTargets(t){
   const out = { ...t };
   if(out.followups === 5) out.followups = 10;
+  if(out.appointments === 8) out.appointments = 4; // her sheet: 4 offensive appointments a week
   if(typeof out.exercise !== 'number') out.exercise = 3;
   return out;
 }
@@ -924,6 +954,9 @@ function mergeWithDefaults(parsed){
     weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
     dayHistory: parsed.dayHistory || [],
     pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
+    fycGoals: Array.isArray(parsed.fycGoals) ? parsed.fycGoals : base.fycGoals,
+    // Weekly points only apply to weeks from this Monday on (no retroactive payout).
+    weeklyPayFrom: parsed.weeklyPayFrom || mondayOf(new Date()),
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
     questLog: parsed.questLog || [],
     points: { ...base.points, ...(parsed.points||{}) },
@@ -947,7 +980,7 @@ async function loadState(){
   // If upgrading the saved data changed the reward list (e.g. the hair
   // treatment rule above), write it back now so Odin's panel sees it too
   // instead of waiting for the next edit.
-  if(snap.exists() && JSON.stringify(merged.rewardItems) !== JSON.stringify(snap.data().rewardItems)){
+  if(snap.exists() && (JSON.stringify(merged.rewardItems) !== JSON.stringify(snap.data().rewardItems) || snap.data().fycGoals === undefined)){
     await setDoc(stateRef, merged);
   }
   if(!snap.exists()){
@@ -972,6 +1005,19 @@ function saveState(){
 function markProofPointsAwarded(t){
   if(t.touchpoint.logged && t.touchpoint.approved === 'approved') t.touchpoint.pointsAwarded = true;
   if(t.exercise.approved === 'approved') t.exercise.pointsAwarded = true;
+}
+// Pays weekly appointment/exercise points for finished weeks, once each. Safe to
+// call any time (idempotent); also picks up exercise Odin approved late.
+function applyWeeklyPoints(){
+  const r = payWeeklyPoints(state.weekHistory, state.points, state.weeklyPayFrom);
+  if(!r.events.length) return false;
+  state.weekHistory = r.weekHistory; state.points = r.points;
+  for(const ev of r.events){
+    addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: fmtDate(new Date()), pingSent: false }).catch(()=>{});
+    pingOdin(`⭐ ${ev.reason}: +${ev.amount} pts. Balance now ${r.points.total}.`);
+  }
+  saveState();
+  return true;
 }
 async function checkDailyReset(){
   const todayStr = fmtDate(new Date());
@@ -1026,6 +1072,7 @@ async function checkDailyReset(){
     state.rewardItems = refreshRewardItems(state.rewardItems, new Date());
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
     state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
+    applyWeeklyPoints();
     state.today = defaultToday(todayStr);
     saveState();
   }
@@ -1053,6 +1100,7 @@ function checkWeeklyReset(){
     }
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
     state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
+    applyWeeklyPoints();
     sendWeeklyRecap(w.weekStart);
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
     saveState();
@@ -1099,6 +1147,8 @@ onAuthStateChanged(auth, async (user) => {
       state = await loadState();
       await checkDailyReset();
       checkWeeklyReset();
+      applyWeeklyPoints();
+      saveState(); // also persists weeklyPayFrom the first time
       wireAllHandlers();
       renderAll();
       initTimer();
@@ -1236,6 +1286,21 @@ function completeQuest(i){
   logQuestEvent(q, 'completed');
   saveState(); renderQuests(); renderMainQuestPrompt();
 }
+// Reschedule / give up on a quest that's still open today. It moves into the
+// Unfinished card (which asks for the reason and the new date), and the slot
+// frees up. An open slot at Submit Day means the day isn't fully cleared.
+function moveQuestToUnfinished(i, action){
+  const q = state.today.quests[i];
+  if(!q.text.trim() || q.status === 'completed') return;
+  if(!q.id){ q.id = genId('q'); q.createdDate = fmtDate(new Date()); }
+  q.status = 'not_started';
+  if(!q.carriedDates) q.carriedDates = [];
+  state.pendingCarryover.push(q);
+  state.today.quests[i] = emptyQuest(i === 0 ? 'main' : 'side');
+  reasonPanelOpenFor = { id: q.id, action: action === 'giveup' ? 'cancel' : 'reschedule' };
+  saveState(); renderQuests(); renderUnfinished(); renderMainQuestPrompt();
+  showToast(action === 'giveup' ? 'Pick a reason below to give it up' : 'Pick a reason and date below');
+}
 function undoCompleteQuest(i){
   const q = state.today.quests[i];
   if(q.status !== 'completed') return;
@@ -1258,7 +1323,7 @@ function maybePingAgenda(){
   t.agendaPinged = true;
   saveState();
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  pingOdin(`📋 Serene's agenda for <b>${t.date}</b>:\n1. ${esc(items[0])} (main)\n2. ${esc(items[1])}\n3. ${esc(items[2])}`);
+  pingOdin(`📋 Serene's agenda for <b>${t.date}</b>:\n1. ${esc(items[0])}\n2. ${esc(items[1])}\n3. ${esc(items[2])}`);
   showToast('Agenda sent to Odin');
 }
 
@@ -1287,7 +1352,7 @@ function renderQuests(){
 
     const input = document.createElement('input');
     input.className = 'quest-input'; input.type = 'text';
-    input.placeholder = i === 0 ? "Today's single most important outcome…" : 'Optional…';
+    input.placeholder = i === 0 ? "Today's most important outcome…" : 'Another must-do for today…';
     input.value = q.text; input.disabled = locked;
     input.addEventListener('input', () => {
       if(!q.id && input.value.trim()){ q.id = genId('q'); q.createdDate = fmtDate(new Date()); }
@@ -1320,6 +1385,16 @@ function renderQuests(){
         startBtn.className = 'quest-action-btn start'; startBtn.textContent = '▶ Start';
         startBtn.addEventListener('click', () => startQuest(i));
         meta.appendChild(startBtn);
+      }
+      if(q.status === 'not_started' || q.status === 'in_progress'){
+        const rsBtn = document.createElement('button');
+        rsBtn.className = 'quest-action-btn'; rsBtn.textContent = '↪ Reschedule';
+        rsBtn.addEventListener('click', () => moveQuestToUnfinished(i, 'reschedule'));
+        meta.appendChild(rsBtn);
+        const guBtn = document.createElement('button');
+        guBtn.className = 'quest-action-btn'; guBtn.textContent = '✕ Give up';
+        guBtn.addEventListener('click', () => moveQuestToUnfinished(i, 'giveup'));
+        meta.appendChild(guBtn);
       }
       if(q.status === 'in_progress' && q.startedAt){
         const started = document.createElement('span');
@@ -1453,7 +1528,7 @@ function renderUnfinished(){
   wrap.innerHTML = '';
   if(state.pendingCarryover.length === 0){ card.style.display = 'none'; return; }
   card.style.display = '';
-  const labelFor = q => q.role === 'main' ? 'Main Quest' : 'Side Quest';
+  const labelFor = q => q.role === 'main' ? 'Main Quest' : 'Quest';
   state.pendingCarryover.forEach(q => {
     const item = document.createElement('div');
     item.className = 'unfinished-item';
@@ -1868,7 +1943,95 @@ async function submitDay(){
   showToast('Submitted to Odin');
 }
 
+/* ---------- FYC challenges ---------- */
+function escHtml(x){ return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function money(n){ return '$' + Math.round(n).toLocaleString('en-SG'); }
+function renderFycGoals(){
+  const wrap = document.getElementById('fycGoalsList');
+  const goals = state.fycGoals || [];
+  if(!goals.length){ wrap.innerHTML = '<div class="empty-note">No challenges yet — tap + Add.</div>'; return; }
+  const today = fmtDate(new Date());
+  let needSave = false;
+  wrap.innerHTML = goals.map(g => {
+    const p = goalProgress(g, state.pipeline.cases, today);
+    // Tell Odin the first time each tier is reached (flagged so it only fires once).
+    g.pinged = g.pinged || [];
+    p.reached.forEach(t => {
+      if(!g.pinged.includes(t.target)){
+        g.pinged.push(t.target); needSave = true;
+        pingOdin(`🎯 Serene hit the <b>${money(t.target)}</b> tier of <b>${escHtml(g.name)}</b>! Reward: ${escHtml(t.reward)}. Total ${money(p.total)}.`);
+      }
+    });
+    const status = p.allDone ? '🎉 All tiers hit' : p.ended ? 'Ended' : (p.daysLeft != null ? `${p.daysLeft} days left` : 'No end date set');
+    const tierRows = p.tiers.map(t => {
+      const done = p.total >= t.target;
+      return `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;${done ? 'color:var(--teal);font-weight:600' : 'color:var(--ink-dim)'}"><span>${done ? '✓' : '○'} ${money(t.target)}</span><span>${escHtml(t.reward)}</span></div>`;
+    }).join('');
+    const nextLine = p.next ? `${money(p.next.target - p.total)} to ${money(p.next.target)} → ${escHtml(p.next.reward)}` : 'Top tier reached';
+    return `
+    <div style="padding:12px 0;border-top:1px solid var(--card-border);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <div class="stat-name" style="margin:0">${escHtml(g.name)}</div>
+        <button data-fg-del="${g.id}" class="edit-btn" style="padding:2px 8px" title="Delete">✕</button>
+      </div>
+      <div class="mini-stat" style="margin:4px 0">${money(p.total)}</div>
+      <div class="bar-track"><div class="bar-fill thin" style="width:${p.pctToNext}%;background:var(--teal);box-shadow:none"></div></div>
+      <div class="empty-note" style="padding:6px 0 8px">${nextLine} · ${status}</div>
+      ${tierRows}
+      <div class="empty-note" style="padding:8px 0 0;font-size:11px">Counts ${g.basis === 'inforced' ? 'inforced' : 'submitted (closed)'} FYC from ${escHtml(g.startDate || 'the start')}${g.endDate ? ' to ' + escHtml(g.endDate) : ''} · from pipeline ${money(p.counted)} + already clocked <a href="#" data-fg-carry="${g.id}" style="color:var(--gold)">${money(g.carried || 0)}</a></div>
+      ${g.note ? `<div class="empty-note" style="padding:4px 0 0;font-size:11px">${escHtml(g.note)}</div>` : ''}
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-fg-del]').forEach(b => b.addEventListener('click', () => {
+    const g = state.fycGoals.find(x => x.id === b.dataset.fgDel);
+    if(!g || !confirm(`Delete "${g.name}"?`)) return;
+    state.fycGoals = state.fycGoals.filter(x => x.id !== g.id);
+    saveState(); renderFycGoals();
+  }));
+  wrap.querySelectorAll('[data-fg-carry]').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const g = state.fycGoals.find(x => x.id === a.dataset.fgCarry); if(!g) return;
+    const next = prompt('FYC you had already clocked toward this challenge before the app tracked dates ($):', g.carried || 0);
+    if(next === null) return;
+    g.carried = Math.max(0, Number(next) || 0);
+    saveState(); renderFycGoals();
+  }));
+  if(needSave) saveState();
+}
+function wireFycGoals(){
+  const form = document.getElementById('fycGoalForm');
+  document.getElementById('fycGoalAddToggle').addEventListener('click', () => {
+    form.style.display = form.style.display === 'none' ? '' : 'none';
+    if(form.style.display !== 'none' && !document.getElementById('fgStart').value) document.getElementById('fgStart').value = fmtDate(new Date());
+  });
+  document.getElementById('fgSaveBtn').addEventListener('click', () => {
+    const err = document.getElementById('fgErr'); err.textContent = '';
+    const name = document.getElementById('fgName').value.trim();
+    if(!name){ err.textContent = 'Give it a name.'; return; }
+    const parsed = parseTiers(document.getElementById('fgTiers').value);
+    if(!parsed.ok){ err.textContent = parsed.error; return; }
+    const start = document.getElementById('fgStart').value, end = document.getElementById('fgEnd').value;
+    if(end && start && end < start){ err.textContent = 'End date is before the start date.'; return; }
+    state.fycGoals.push({
+      id: genId('g'), name, tiers: parsed.tiers, startDate: start || fmtDate(new Date()), endDate: end || '',
+      basis: document.getElementById('fgBasis').value, carried: Math.max(0, Number(document.getElementById('fgCarried').value) || 0), pinged: []
+    });
+    ['fgName','fgTiers','fgEnd','fgCarried'].forEach(id => document.getElementById(id).value = '');
+    form.style.display = 'none';
+    saveState(); renderFycGoals();
+  });
+}
+
 /* ---------- Pipeline ---------- */
+// Records the date a case reached Closed (submitted) / Inforced so FYC
+// challenges can count only what landed inside their window. Moving a case
+// back out of a stage clears that stage's date. Cases that were already
+// closed before this existed have no date — use "already clocked" for those.
+function stampCaseDates(c){
+  const today = fmtDate(new Date());
+  if(c.stage === 'closed' || c.stage === 'inforced'){ if(!c.closedAt) c.closedAt = today; } else { delete c.closedAt; }
+  if(c.stage === 'inforced'){ if(!c.inforcedAt) c.inforcedAt = today; } else { delete c.inforcedAt; }
+}
 function genCaseId(){ return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function fycOpenedTotal(){
   return state.pipeline.cases.filter(c => c.stage === 'proposed' && !c.revisit).reduce((sum, c) => sum + (Number(c.fyc) || 0), 0);
@@ -1884,23 +2047,24 @@ function toggleRevisit(caseId){
   const c = state.pipeline.cases.find(x => x.id === caseId);
   if(!c) return;
   c.revisit = !c.revisit;
-  saveState(); renderPipeline(); renderFycOpened();
+  saveState(); renderPipeline(); renderFycOpened(); renderFycGoals();
 }
 function moveCaseStage(caseId, newStage){
   const c = state.pipeline.cases.find(x => x.id === caseId);
   if(!c) return;
   const wasInforced = c.stage === 'inforced';
   c.stage = newStage;
+  stampCaseDates(c);
   if(newStage === 'inforced' && !wasInforced && !c.inforcedCounted){
     state.currentWeek.stats.fycc = (state.currentWeek.stats.fycc || 0) + (Number(c.fyc) || 0);
     c.inforcedCounted = true;
     showToast(`+$${(Number(c.fyc)||0).toLocaleString('en-SG')} added to this week's FYCC Earned`);
   }
-  saveState(); renderPipeline(); renderFycOpened(); renderStats();
+  saveState(); renderPipeline(); renderFycOpened(); renderFycGoals(); renderStats();
 }
 function deleteCase(caseId){
   state.pipeline.cases = state.pipeline.cases.filter(x => x.id !== caseId);
-  saveState(); renderPipeline(); renderFycOpened();
+  saveState(); renderPipeline(); renderFycOpened(); renderFycGoals();
 }
 function renderPipeline(){
   const board = document.getElementById('kanbanBoard');
@@ -1938,7 +2102,7 @@ function renderPipeline(){
       fyc.className = 'kanban-card-fyc'; fyc.type = 'number'; fyc.min = '0'; fyc.value = c.fyc ? c.fyc : '';
       fyc.placeholder = 'Add FYC $ once known';
       fyc.addEventListener('input', () => { c.fyc = Math.max(0, Number(fyc.value) || 0); saveState(); });
-      fyc.addEventListener('blur', () => { renderPipeline(); renderFycOpened(); });
+      fyc.addEventListener('blur', () => { renderPipeline(); renderFycOpened(); renderFycGoals(); });
       const fycRow = document.createElement('div'); fycRow.className = 'kanban-card-fyc-row';
       const fycPrefix = document.createElement('span'); fycPrefix.className = 'fyc-prefix'; fycPrefix.textContent = '$';
       fycRow.appendChild(fycPrefix); fycRow.appendChild(fyc);
@@ -1975,14 +2139,16 @@ function wirePipeline(){
     const fyc = Math.max(0, Number(document.getElementById('caseFycInput').value) || 0);
     const stage = document.getElementById('caseStageInput').value;
     if(!client && !caseName){ showToast('Add a client or case name first'); return; }
-    state.pipeline.cases.unshift({ id: genCaseId(), client, caseName, fyc, stage, inforcedCounted: false, revisit: false, createdAt: fmtDate(new Date()) });
+    const newCase = { id: genCaseId(), client, caseName, fyc, stage, inforcedCounted: false, revisit: false, createdAt: fmtDate(new Date()) };
+    stampCaseDates(newCase);
+    state.pipeline.cases.unshift(newCase);
     saveState();
     document.getElementById('caseClientInput').value = '';
     document.getElementById('caseNameInput').value = '';
     document.getElementById('caseFycInput').value = '';
     document.getElementById('caseStageInput').value = 'prospect';
     document.getElementById('caseForm').style.display = 'none';
-    renderPipeline(); renderFycOpened();
+    renderPipeline(); renderFycOpened(); renderFycGoals();
     showToast('Case added');
   });
 }
@@ -2095,14 +2261,14 @@ function wireExportImport(){
 
 /* ---------- Render all / wire all ---------- */
 function renderAll(){
-  renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderUnfinished();
+  renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderFycGoals(); renderUnfinished();
   renderQuests(); renderMainQuestPrompt(); renderDailies(); renderTimer(); renderStats();
   renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
   if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
 }
 function wireAllHandlers(){
-  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal();
+  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals();
   wireTouchpointExercise(); wireSubmitDay(); wirePipeline(); wireExportImport();
 }
 </script>

@@ -73,7 +73,7 @@ export const STAT_DEFS = [
   { key: "exercise", label: "Exercise (approved)", isMoney: false, targetComputed: false, derived: true }
 ];
 
-export const DEFAULT_WEEKLY_TARGETS = { appointments: 8, followups: 10, exercise: 3 };
+export const DEFAULT_WEEKLY_TARGETS = { appointments: 4, followups: 10, exercise: 3 };
 
 export const PIPELINE_STAGES = [
   { key: "prospect", label: "Prospect", sub: "to meet" },
@@ -185,11 +185,15 @@ export const DEFAULT_TOUCHPOINT_CHALLENGE = {
 // ----------------------------------------------------------------------------
 
 export const POINT_VALUES = {
-  QUEST_SIDE: 10,
-  QUEST_MAIN: 15,
-  EXERCISE_APPROVED: 20,
-  TOUCHPOINT: 10,
-  FULL_DAY_BONUS: 15,
+  // Per her rules sheet: all 3 daily quests cleared = 2 pts (x streak multiplier).
+  // Exercise and appointments pay once a week (see payWeeklyPoints), not per day.
+  QUEST_SIDE: 0,
+  QUEST_MAIN: 0,
+  EXERCISE_APPROVED: 0,
+  TOUCHPOINT: 0,
+  FULL_DAY_BONUS: 2,
+  WEEKLY_APPOINTMENTS: 10,  // hit the weekly appointments target
+  WEEKLY_EXERCISE: 6,       // 3 approved exercise sessions in the week
   MISSED_DAY_PENALTY: -20,   // no update posted at all
   INCOMPLETE_DAY_PENALTY: -10 // posted, but didn't clear all 3 quests
 };
@@ -218,14 +222,6 @@ export function settleDay(points, dayFacts) {
   const mult = computeMultiplier(p.streakDays);
 
   let earned = 0;
-  if (dayFacts.questsCompleted > 0) {
-    // crude split: assume 1 main + rest side, capped at totalQuests
-    const sideCount = Math.max(0, dayFacts.questsCompleted - 1);
-    const mainCount = dayFacts.questsCompleted > 0 ? 1 : 0;
-    earned += mainCount * POINT_VALUES.QUEST_MAIN + sideCount * POINT_VALUES.QUEST_SIDE;
-  }
-  if (dayFacts.touchpointLogged) earned += POINT_VALUES.TOUCHPOINT;
-  if (dayFacts.exerciseApproved) earned += POINT_VALUES.EXERCISE_APPROVED;
   if (allQuestsCleared) earned += POINT_VALUES.FULL_DAY_BONUS;
   earned = Math.round(earned * mult);
   if (earned > 0) {
@@ -399,6 +395,35 @@ export function reconcileWeekHistory(weekHistory, dayHistory) {
 // Consecutive unbroken weeks counting back from the most recent completed
 // week (weekHistory is newest-first). Weeks must be back-to-back Mondays, so a
 // missing week ends the run. Expects a reconciled weekHistory.
+// Pays the weekly points for finished weeks that met their targets, once each
+// (flag w.paid.appointments / w.paid.exercise). Only weeks starting on/after
+// payFrom are paid, so history from before this rule isn't paid retroactively.
+// Multiplier = the streak multiplier at the time of paying. Pure.
+export function payWeeklyPoints(weekHistory, points, payFrom) {
+  const p = { ...points };
+  const events = [];
+  const mult = computeMultiplier(p.streakDays);
+  const out = (weekHistory || []).map(w => {
+    if (!payFrom || w.weekStart < payFrom) return w;
+    const tg = { ...DEFAULT_WEEKLY_TARGETS, ...(w.targets || {}) };
+    const paid = { ...(w.paid || {}) };
+    const st = w.stats || {};
+    let changed = false;
+    if (!paid.appointments && (st.appointments || 0) >= tg.appointments && tg.appointments > 0) {
+      const amt = Math.round(POINT_VALUES.WEEKLY_APPOINTMENTS * mult);
+      p.total += amt; paid.appointments = true; changed = true;
+      events.push({ type: "earn", amount: amt, reason: `Weekly appointments target hit (week of ${w.weekStart})`, ping: false });
+    }
+    if (!paid.exercise && (st.exercise || 0) >= tg.exercise && tg.exercise > 0) {
+      const amt = Math.round(POINT_VALUES.WEEKLY_EXERCISE * mult);
+      p.total += amt; paid.exercise = true; changed = true;
+      events.push({ type: "earn", amount: amt, reason: `Weekly exercise target hit (week of ${w.weekStart})`, ping: false });
+    }
+    return changed ? { ...w, paid } : w;
+  });
+  return { weekHistory: out, points: p, events };
+}
+
 export function computeWeeklyStreakWeeks(weekHistory) {
   let n = 0, prev = null;
   for (const w of (weekHistory || [])) {
@@ -441,3 +466,68 @@ export function logTouchpoint(challenge) {
 export function fmtDate(d) {
   return d.toISOString().slice(0, 10);
 }
+
+// ---------------------------------------------------------------------------
+// FYC GOALS / CHALLENGES (extra to the main IDA goal) — e.g. an incentive
+// campaign with several tiers. Progress is counted from pipeline cases by the
+// date they reached the goal's basis stage (closedAt = submitted, inforcedAt =
+// inforced), plus a manually-entered "already clocked" amount for cases that
+// predate date tracking.
+// ---------------------------------------------------------------------------
+export function diffDaysStr(a, b) {
+  const [y1, m1, d1] = a.split("-").map(Number);
+  const [y2, m2, d2] = b.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+// "5k = $2,000" / "10000: $4,000 cash" per line -> [{target, reward}]
+export function parseTiers(text) {
+  const tiers = [];
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^\$?\s*([\d,.]+)\s*(k)?\s*(?:=|:|->|→|-|–)\s*(.+)$/i);
+    if (!m) return { ok: false, error: `Couldn't read "${line}" — use e.g. 5k = $2,000` };
+    let target = parseFloat(m[1].replace(/,/g, ""));
+    if (m[2]) target *= 1000;
+    if (!(target > 0)) return { ok: false, error: `Target must be above 0 in "${line}"` };
+    tiers.push({ target, reward: m[3].trim() });
+  }
+  if (!tiers.length) return { ok: false, error: "Add at least one tier" };
+  return { ok: true, tiers: tiers.sort((a, b) => a.target - b.target) };
+}
+
+export function goalProgress(goal, cases, today) {
+  const start = goal.startDate || "0000-01-01";
+  const end = goal.endDate || "9999-12-31";
+  const key = goal.basis === "inforced" ? "inforcedAt" : "closedAt";
+  let counted = 0;
+  for (const c of (cases || [])) {
+    if (c.revisit) continue;
+    const d = c[key];
+    if (d && d >= start && d <= end) counted += Number(c.fyc) || 0;
+  }
+  const total = counted + (Number(goal.carried) || 0);
+  const tiers = [...(goal.tiers || [])].map(t => ({ target: Number(t.target) || 0, reward: t.reward || "" }))
+    .sort((a, b) => a.target - b.target);
+  const reached = tiers.filter(t => total >= t.target);
+  const next = tiers.find(t => total < t.target) || null;
+  const prevTarget = reached.length ? reached[reached.length - 1].target : 0;
+  const pctToNext = next ? Math.max(0, Math.min(100, Math.round(((total - prevTarget) / (next.target - prevTarget)) * 100))) : 100;
+  return {
+    counted, total, tiers, reached, next, pctToNext,
+    allDone: tiers.length > 0 && !next,
+    ended: !!goal.endDate && today > goal.endDate,
+    daysLeft: goal.endDate ? Math.max(0, diffDaysStr(today, goal.endDate)) : null
+  };
+}
+
+export const LEAGUE_CHALLENGE_GOAL = {
+  id: "league-oct-2026", name: "10K, I OK! 20K Sure OK!", startDate: "2026-10-01", endDate: "",
+  basis: "submitted", carried: 0, pinged: [],
+  note: "Inception 1 Oct 2026, own cases included. T&Cs apply — check keynotes for the exact FYC basis and end date.",
+  tiers: [
+    { target: 5000, reward: "$2,000 cash" }, { target: 10000, reward: "$4,000 cash" },
+    { target: 15000, reward: "$6,000 cash" }, { target: 20000, reward: "$8,000 cash" }
+  ]
+};

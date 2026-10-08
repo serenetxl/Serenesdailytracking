@@ -66,6 +66,11 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 </div>
 
 <div class="card">
+  <h2>FYC Challenges</h2>
+  <div id="fycGoalsWrap"><p class="sub">Loading…</p></div>
+</div>
+
+<div class="card">
   <h2>Pending Approval</h2>
   <div id="approvalWrap"><p class="sub">Loading…</p></div>
 </div>
@@ -157,7 +162,7 @@ window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks, reconcileWeekHistory, POINT_VALUES
+  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks, reconcileWeekHistory, POINT_VALUES, goalProgress
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -195,7 +200,7 @@ onAuthStateChanged(auth, async (user) => {
       state = snap.data();
       document.getElementById('adjBtn').disabled = false;
       document.getElementById('streakAdjBtn').disabled = false;
-      renderOverview(); renderApprovals(); renderJournal(); renderWeekly(); renderPipeline(); renderRewardsManage();
+      renderOverview(); renderApprovals(); renderJournal(); renderFycGoals(); renderWeekly(); renderPipeline(); renderRewardsManage();
     }, (err) => {
       console.error('Firestore read failed', err);
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
@@ -298,9 +303,9 @@ async function approveProof(kind, dateStr, live){
     updates.dayHistory = state.dayHistory.map(x => x.date === dateStr
       ? { ...x, [`${kind}Approved`]: 'approved', ...(award ? { [`${kind}Awarded`]: true } : {}) } : x);
   }
-  if(award) updates['points.total'] = state.points.total + amount;
+  if(award && amount > 0) updates['points.total'] = state.points.total + amount;
   await updateDoc(stateRef, updates);
-  if(award){
+  if(award && amount > 0){
     await addDoc(collection(db, "pointsLedger"), {
       ts: serverTimestamp(), type: 'earn', amount, reason: `${label} approved by Odin (${dateStr})`,
       date: new Date().toISOString().slice(0,10), pingSent: false
@@ -309,6 +314,24 @@ async function approveProof(kind, dateStr, live){
 }
 const approveExercise = (dateStr, live) => approveProof('exercise', dateStr, live);
 const approveTouchpoint = (dateStr, live) => approveProof('touchpoint', dateStr, live);
+
+function renderFycGoals(){
+  const wrap = document.getElementById('fycGoalsWrap');
+  const goals = Array.isArray(state.fycGoals) ? state.fycGoals : [];
+  if(!goals.length){ wrap.innerHTML = '<p class="sub">No challenges set.</p>'; return; }
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const cases = (state.pipeline && state.pipeline.cases) || [];
+  wrap.innerHTML = goals.map(g => {
+    const p = goalProgress(g, cases, today);
+    const reached = p.reached && p.reached.length ? p.reached[p.reached.length-1] : null;
+    const next = p.next ? `Next: $${p.next.target.toLocaleString()} (${escapeHtml(p.next.reward||'')})` : 'All tiers reached';
+    return `<div class="row" style="flex-direction:column;align-items:stretch">
+      <div><b>${escapeHtml(g.name)}</b> <span class="sub" style="margin:0">from ${g.startDate}${g.endDate?' to '+g.endDate:''}</span></div>
+      <div>$${Number(p.counted).toLocaleString()} counted${reached?` · reached $${reached.target.toLocaleString()} (${escapeHtml(reached.reward||'')})`:''}</div>
+      <div class="sub" style="margin:0">${next}</div></div>`;
+  }).join('');
+}
 
 function renderJournal(){
   const wrap = document.getElementById('journalWrap');
