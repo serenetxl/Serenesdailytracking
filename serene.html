@@ -1375,7 +1375,8 @@ function renderQuests(){
   const mainLocked = isMainLocked();
 
   state.today.quests.forEach((q, i) => {
-    const locked = i === 0 && mainLocked;
+    // An empty main slot stays editable, so a rescheduled main quest can be replaced.
+    const locked = i === 0 && mainLocked && !!q.text.trim();
     const row = document.createElement('div');
     row.className = 'quest' + (i === 0 ? ' main' : '') + (q.status === 'completed' ? ' done' : '');
 
