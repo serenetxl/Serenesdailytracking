@@ -956,6 +956,7 @@ function mergeWithDefaults(parsed){
     pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
     fycGoals: Array.isArray(parsed.fycGoals) ? parsed.fycGoals : base.fycGoals,
     // Weekly points only apply to weeks from this Monday on (no retroactive payout).
+    scheduledQuests: Array.isArray(parsed.scheduledQuests) ? parsed.scheduledQuests : [],
     weeklyPayFrom: parsed.weeklyPayFrom || mondayOf(new Date()),
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
     questLog: parsed.questLog || [],
@@ -1019,6 +1020,21 @@ function applyWeeklyPoints(){
   saveState();
   return true;
 }
+// Brings rescheduled quests back on their new date (or later, if the app wasn't
+// opened that day) into the Unfinished card, ready to Continue into a slot.
+function releaseScheduledQuests(){
+  const todayStr = fmtDate(new Date());
+  const list = state.scheduledQuests || [];
+  const due = list.filter(q => q.rescheduledTo && q.rescheduledTo <= todayStr);
+  if(!due.length) return;
+  const have = new Set(state.pendingCarryover.map(q => q.id));
+  due.forEach(q => {
+    if(have.has(q.id)) return;
+    state.pendingCarryover.push({ ...q, status: 'not_started', startedAt: null, completedDate: null, reasonCode: null, reasonNote: null, rescheduledTo: null });
+  });
+  state.scheduledQuests = list.filter(q => !(q.rescheduledTo && q.rescheduledTo <= todayStr));
+  saveState();
+}
 async function checkDailyReset(){
   const todayStr = fmtDate(new Date());
   if(state.today.date !== todayStr){
@@ -1074,6 +1090,7 @@ async function checkDailyReset(){
     state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
     applyWeeklyPoints();
     state.today = defaultToday(todayStr);
+    releaseScheduledQuests();
     saveState();
   }
 }
@@ -1148,6 +1165,7 @@ onAuthStateChanged(auth, async (user) => {
       await checkDailyReset();
       checkWeeklyReset();
       applyWeeklyPoints();
+      releaseScheduledQuests();
       saveState(); // also persists weeklyPayFrom the first time
       wireAllHandlers();
       renderAll();
@@ -1399,7 +1417,9 @@ function renderQuests(){
       if(q.status === 'in_progress' && q.startedAt){
         const started = document.createElement('span');
         started.className = 'quest-started-at';
-        started.textContent = 'Started ' + new Date(q.startedAt).toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit'});
+        const sd = new Date(q.startedAt);
+        const sameDay = fmtDate(sd) === state.today.date;
+        started.textContent = 'Started ' + (sameDay ? '' : sd.toLocaleDateString('en-SG', {day:'numeric', month:'short'}) + ' ') + sd.toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit'});
         meta.appendChild(started);
       }
       if(q.status === 'completed'){
@@ -1438,6 +1458,8 @@ function continueQuest(id){
   if(slot === -1){ showToast('All 3 quest slots are full today'); return; }
   const q = state.pendingCarryover[idx];
   q.carriedDates.push(fmtDate(new Date()));
+  // A new day is a fresh start: yesterday's 'In Progress' + start time don't carry over.
+  q.status = 'not_started'; q.startedAt = null;
   state.today.quests[slot] = q;
   state.pendingCarryover.splice(idx, 1);
   saveState(); renderQuests(); renderUnfinished(); renderMainQuestPrompt();
@@ -1467,6 +1489,8 @@ function finalizeReschedule(id, reasonCode, reasonNote, targetDate){
   q.status = 'rescheduled'; q.reasonCode = reasonCode; q.reasonNote = reasonNote || null; q.rescheduledTo = targetDate;
   logQuestEvent(q, 'rescheduled', { reasonCode, reasonNote: reasonNote || null, rescheduledTo: targetDate });
   state.pendingCarryover.splice(idx, 1);
+  // Park it until the new date, when it comes back into the Unfinished card.
+  (state.scheduledQuests = state.scheduledQuests || []).push({ ...q });
   reasonPanelOpenFor = null;
   saveState(); renderUnfinished();
   showToast('Rescheduled to ' + targetDate);
