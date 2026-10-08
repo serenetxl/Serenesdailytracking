@@ -427,3 +427,17 @@ export function refreshConditionalRewards(rewardItems, weekHistory, now = new Da
     return item;
   });
 }
+
+/**
+ * Touchpoint challenge: 50-day cumulative counter, +1 per logged day.
+ */
+export function logTouchpoint(challenge) {
+  const c = { ...challenge };
+  if (!c.startedAt) c.startedAt = new Date().toISOString().slice(0, 10);
+  c.count = Math.min(c.target, c.count + 1);
+  return c;
+}
+
+export function fmtDate(d) {
+  return d.toISOString().slice(0, 10);
+}
