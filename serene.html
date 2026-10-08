@@ -1037,6 +1037,15 @@ function releaseScheduledQuests(){
 }
 async function checkDailyReset(){
   const todayStr = fmtDate(new Date());
+  // A quest can't be "in progress" from an earlier day: if one still carries
+  // yesterday's start time (e.g. it was carried over), reset it to Not Started.
+  let fixedStale = false;
+  state.today.quests.forEach(q => {
+    if(q.status === 'in_progress' && q.startedAt && fmtDate(new Date(q.startedAt)) !== state.today.date && state.today.date === todayStr){
+      q.status = 'not_started'; q.startedAt = null; fixedStale = true;
+    }
+  });
+  if(fixedStale) saveState();
   if(state.today.date !== todayStr){
     const t = state.today;
     const checklistDone = t.checklist.filter(Boolean).length;
