@@ -546,9 +546,9 @@
 
     <!-- Morning Dailies Focus Timer -->
     <div class="card timer-card">
-      <div class="timer-label">MORNING DAILIES</div>
-      <div class="timer-display" id="timerDisplay">30:00</div>
-      <div class="timer-flow">check → triage → choose → execute</div>
+      <div class="timer-label" id="timerLabel">MORNING DAILIES</div>
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="timer-flow">check → triage → choose → execute · 25 min · 10 min break · 25 min</div>
       <div class="timer-controls">
         <button class="timer-btn primary" id="timerStartBtn">Start</button>
         <button class="timer-btn primary" id="timerPauseBtn" style="display:none;">Pause</button>
@@ -764,7 +764,7 @@ import {
 const { auth, db, storage } = initFirebase();
 const stateRef = doc(db, "meta", "state");
 
-const DAILY_TEMPLATE = [
+const DAILY_TEMPLATE_OLD = [
   'Check urgent WhatsApp / Telegram / email',
   'Check outstanding documents',
   'Check underwriting / submissions',
@@ -774,6 +774,14 @@ const DAILY_TEMPLATE = [
   '15-minute skill practice',
   "Choose today's 3 main quests"
 ];
+// From 9 Oct 2026 the 15-minute skill practice is replaced by a news catch-up.
+// Same slot, same count, so ticks and history aren't disturbed; earlier days keep the old wording.
+const NEWS_ITEM = 'Catch up on news (global / finance / business)';
+function dailyTemplate(dateStr){
+  const d = dateStr || fmtDate(new Date());
+  if(d < '2026-10-09') return DAILY_TEMPLATE_OLD;
+  return DAILY_TEMPLATE_OLD.map(x => x === '15-minute skill practice' ? NEWS_ITEM : x);
+}
 
 const STAT_DEFS = [
   { key: 'appointments', label: 'Appointments' },
@@ -816,9 +824,15 @@ function emptyQuest(role){
 }
 function defaultQuests(){ return [ emptyQuest('main'), emptyQuest('side'), emptyQuest('side') ]; }
 
-const TIMER_DURATION_MS = 30 * 60 * 1000;
+// 25 min focus -> 10 min break -> 25 min focus (60 min total).
+const TIMER_PHASES = [
+  { key: 'focus1', label: 'FOCUS 1 OF 2', ms: 25 * 60 * 1000 },
+  { key: 'break',  label: 'BREAK',        ms: 10 * 60 * 1000 },
+  { key: 'focus2', label: 'FOCUS 2 OF 2', ms: 25 * 60 * 1000 }
+];
+const TIMER_DURATION_MS = TIMER_PHASES[0].ms;
 function defaultTimer(){
-  return { status: 'idle', endAt: null, remainingMs: TIMER_DURATION_MS, milestonesFired: [] };
+  return { status: 'idle', phase: 0, endAt: null, remainingMs: TIMER_PHASES[0].ms, milestonesFired: [] };
 }
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -847,7 +861,7 @@ function defaultTargets(){ return { appointments:4, followups:10, exercise:3 }; 
 function defaultToday(dateStr){
   return {
     date: dateStr,
-    checklist: DAILY_TEMPLATE.map(() => false),
+    checklist: DAILY_TEMPLATE_OLD.map(() => false),
     quests: defaultQuests(),
     energy: null,
     journal: { text: '', updatedAt: null },
@@ -1076,7 +1090,7 @@ async function checkDailyReset(){
 
     if(hadActivity){
       state.dayHistory.unshift({
-        date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE.length,
+        date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE_OLD.length,
         questsDone, questsTotal: 3, energy: t.energy,
         journal: (t.journal && t.journal.text && t.journal.text.trim()) ? t.journal.text : null,
         touchpoint: t.touchpoint.logged, touchpointApproved: t.touchpoint.approved, touchpointPhotoUrl: t.touchpoint.photoUrl || null,
@@ -1601,7 +1615,7 @@ function renderUnfinished(){
 function renderDailies(){
   const wrap = document.getElementById('dailyList');
   wrap.innerHTML = '';
-  DAILY_TEMPLATE.forEach((text, i) => {
+  dailyTemplate(state.today.date).forEach((text, i) => {
     const done = !!state.today.checklist[i];
     const row = document.createElement('div');
     row.className = 'daily-item' + (done ? ' done' : '');
@@ -1616,17 +1630,24 @@ function renderDailies(){
     wrap.appendChild(row);
   });
   const doneCount = state.today.checklist.filter(Boolean).length;
-  const total = DAILY_TEMPLATE.length;
+  const total = DAILY_TEMPLATE_OLD.length;
   document.getElementById('dailyCount').textContent = `${doneCount} / ${total}`;
   document.getElementById('dailyBar').style.width = (total ? (doneCount/total*100) : 0) + '%';
 }
 
 /* ---------- Morning Dailies Focus Timer ---------- */
-const TIMER_MILESTONES = [
-  { key: '20', atMs: 20 * 60 * 1000, title: '20 minutes left', body: 'Stay on the dailies. Scan, triage, move on.', bannerClass: 'milestone-20', bannerText: '20 MIN LEFT' },
-  { key: '10', atMs: 10 * 60 * 1000, title: '10 minutes left', body: 'Wrap up your checks and decide what actually needs your attention today.', bannerClass: 'milestone-10', bannerText: '10 MIN LEFT — START WRAPPING UP' },
-  { key: 'done', atMs: 0, title: 'Dailies complete', body: "Time's up. Start your Main Quest.", bannerClass: 'milestone-done', bannerText: "TIME'S UP — START YOUR MAIN QUEST" }
-];
+// Milestones are per phase (phase index -> list). atMs = time left in that phase.
+const TIMER_MILESTONES = {
+  0: [{ key: 'f1-5', atMs: 5 * 60 * 1000, title: '5 minutes left in Focus 1', body: 'Finish this stretch, then take your break.', bannerClass: 'milestone-20', bannerText: '5 MIN LEFT — BREAK COMES NEXT' }],
+  2: [
+    { key: 'f2-10', atMs: 10 * 60 * 1000, title: '10 minutes left', body: 'Wrap up your checks and decide what actually needs your attention today.', bannerClass: 'milestone-10', bannerText: '10 MIN LEFT — START WRAPPING UP' },
+    { key: 'done', atMs: 0, title: 'Dailies complete', body: "Time's up. Start your Main Quest.", bannerClass: 'milestone-done', bannerText: "TIME'S UP — START YOUR MAIN QUEST" }
+  ]
+};
+const TIMER_PHASE_START = {
+  1: { key: 'break-start', title: 'Break time', body: 'Step away for 10 minutes. Water, stretch, no screens if you can.', bannerClass: 'milestone-20', bannerText: 'BREAK — 10 MIN. STEP AWAY.' },
+  2: { key: 'f2-start', title: 'Back to it', body: '25 minutes to finish your morning dailies.', bannerClass: 'milestone-10', bannerText: 'BACK TO IT — 25 MIN TO FINISH' }
+};
 let timerIntervalId = null;
 let timerBannerAutoHide = null;
 
@@ -1678,14 +1699,28 @@ function resetTimer(){
 function tickTimer(){
   const t = state.today.timer;
   if(t.status !== 'running'){ stopTimerLoop(); return; }
-  const remaining = currentTimerRemaining();
-  TIMER_MILESTONES.forEach(m => {
-    if(!t.milestonesFired.includes(m.key) && remaining <= m.atMs){ t.milestonesFired.push(m.key); fireMilestone(m); }
-  });
-  if(remaining <= 0){
-    t.status = 'done'; t.remainingMs = 0; t.endAt = null;
-    saveState(); stopTimerLoop(); renderQuests();
+  if(typeof t.phase !== 'number') t.phase = 0;
+  let changed = false;
+  // Move through any phases that have already ended (also covers reopening the app late).
+  while(t.endAt - Date.now() <= 0){
+    const ms = (TIMER_MILESTONES[t.phase] || []).find(m => m.atMs === 0);
+    if(t.phase >= TIMER_PHASES.length - 1){
+      if(ms && !t.milestonesFired.includes(ms.key)){ t.milestonesFired.push(ms.key); fireMilestone(ms); }
+      t.status = 'done'; t.remainingMs = 0; t.endAt = null;
+      saveState(); stopTimerLoop(); renderQuests(); renderTimer(); renderMainQuestPrompt();
+      return;
+    }
+    t.phase += 1;
+    t.endAt += TIMER_PHASES[t.phase].ms;
+    t.milestonesFired = [];
+    fireMilestone(TIMER_PHASE_START[t.phase]);
+    changed = true;
   }
+  const remaining = currentTimerRemaining();
+  (TIMER_MILESTONES[t.phase] || []).forEach(m => {
+    if(m.atMs > 0 && !t.milestonesFired.includes(m.key) && remaining <= m.atMs){ t.milestonesFired.push(m.key); fireMilestone(m); changed = true; }
+  });
+  if(changed) saveState();
   renderTimer(); renderMainQuestPrompt();
 }
 function startTimerLoop(){ stopTimerLoop(); timerIntervalId = setInterval(tickTimer, 1000); }
@@ -1696,9 +1731,12 @@ function renderTimer(){
   const display = document.getElementById('timerDisplay');
   display.textContent = fmtMMSS(remaining);
   display.classList.remove('warn','urgent','done');
-  if(t.status === 'done') display.classList.add('done');
-  else if(remaining <= 10*60*1000) display.classList.add('urgent');
-  else if(remaining <= 20*60*1000) display.classList.add('warn');
+  const ph = (typeof t.phase === 'number') ? t.phase : 0;
+  const isBreak = TIMER_PHASES[ph].key === 'break';
+  document.getElementById('timerLabel').textContent = t.status === 'done' ? 'MORNING DAILIES · DONE' : 'MORNING DAILIES · ' + TIMER_PHASES[ph].label;
+  if(t.status === 'done' || isBreak) display.classList.add('done');
+  else if(remaining <= 5*60*1000) display.classList.add('urgent');
+  else if(remaining <= 10*60*1000) display.classList.add('warn');
   const startBtn = document.getElementById('timerStartBtn');
   const pauseBtn = document.getElementById('timerPauseBtn');
   const resumeBtn = document.getElementById('timerResumeBtn');
