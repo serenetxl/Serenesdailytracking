@@ -43,8 +43,8 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 <div id="auth-screen" class="card">
   <h1>ODIN // ADMIN</h1>
   <p class="sub">Sign in</p>
-  <input id="authEmail" type="email" placeholder="email" value="odinyeo5@gmail.com">
-  <input id="authPw" type="password" placeholder="password">
+  <input id="authEmail" type="hidden" value="odinyeo5@gmail.com">
+  <input id="authPw" type="password" placeholder="password" autocomplete="current-password">
   <button id="authBtn" style="width:100%">Sign In</button>
   <p id="authErr" class="sub" style="color:var(--red)"></p>
 </div>
@@ -139,11 +139,25 @@ input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid v
 
 </div>
 
+<script>
+/* Load guard: if the main module never starts (usually because engine.js /
+   shared.js / this page were uploaded at different times, or the browser kept
+   an old copy), say so on the sign-in screen instead of a dead button. */
+window.addEventListener('error', function(e){
+  var el = document.getElementById('authErr');
+  if(el && !window.__booted) el.textContent = 'Page failed to load: ' + (e.message || 'script error') + '. Re-upload engine.js, shared.js and this page together, then hard refresh (Ctrl+Shift+R).';
+});
+setTimeout(function(){
+  var el = document.getElementById('authErr');
+  if(!window.__booted && el && !el.textContent) el.textContent = 'Page did not finish loading. Re-upload engine.js, shared.js and this page together, then hard refresh (Ctrl+Shift+R).';
+}, 4000);
+</script>
 <script type="module">
+window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks
+  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks, reconcileWeekHistory, POINT_VALUES
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -161,6 +175,7 @@ document.getElementById('authBtn').addEventListener('click', async () => {
   catch(e){ document.getElementById('authErr').textContent = e.message; }
 });
 document.getElementById('signoutBtn').addEventListener('click', () => signOut(auth));
+document.getElementById('authPw').addEventListener('keydown', (e) => { if(e.key === 'Enter') document.getElementById('authBtn').click(); });
 
 let state = null;
 
@@ -263,22 +278,37 @@ async function approveDay(dateStr, live){
   }
   pingOdin(`✅ Odin approved <b>${dateStr}</b>.`);
 }
-async function approveExercise(dateStr, live){
+// Approving proof pays its points if the day has already settled (submitted
+// or rolled over) and they haven't been paid yet. If the day is still open,
+// the points are paid when she submits instead — flagged via pointsAwarded so
+// they're never paid twice.
+async function approveProof(kind, dateStr, live){
+  const base = kind === 'exercise' ? POINT_VALUES.EXERCISE_APPROVED : POINT_VALUES.TOUCHPOINT;
+  const label = kind === 'exercise' ? 'Exercise' : 'Touchpoint';
+  const amount = Math.round(base * (state.points.multiplier || 1));
+  let award = false;
+  const updates = {};
   if(live){
-    await updateDoc(stateRef, { 'today.exercise': { ...state.today.exercise, approved: 'approved' } });
+    const obj = state.today[kind];
+    award = state.today.submittedForApproval && !obj.pointsAwarded;
+    updates[`today.${kind}`] = { ...obj, approved: 'approved', ...(award ? { pointsAwarded: true } : {}) };
   } else {
-    const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, exerciseApproved: 'approved' } : d);
-    await updateDoc(stateRef, { dayHistory });
+    const d = state.dayHistory.find(x => x.date === dateStr);
+    award = !!d && !d[`${kind}Awarded`];
+    updates.dayHistory = state.dayHistory.map(x => x.date === dateStr
+      ? { ...x, [`${kind}Approved`]: 'approved', ...(award ? { [`${kind}Awarded`]: true } : {}) } : x);
+  }
+  if(award) updates['points.total'] = state.points.total + amount;
+  await updateDoc(stateRef, updates);
+  if(award){
+    await addDoc(collection(db, "pointsLedger"), {
+      ts: serverTimestamp(), type: 'earn', amount, reason: `${label} approved by Odin (${dateStr})`,
+      date: new Date().toISOString().slice(0,10), pingSent: false
+    });
   }
 }
-async function approveTouchpoint(dateStr, live){
-  if(live){
-    await updateDoc(stateRef, { 'today.touchpoint': { ...state.today.touchpoint, approved: 'approved' } });
-  } else {
-    const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, touchpointApproved: 'approved' } : d);
-    await updateDoc(stateRef, { dayHistory });
-  }
-}
+const approveExercise = (dateStr, live) => approveProof('exercise', dateStr, live);
+const approveTouchpoint = (dateStr, live) => approveProof('touchpoint', dateStr, live);
 
 function renderJournal(){
   const wrap = document.getElementById('journalWrap');
@@ -378,7 +408,7 @@ function renderRewardsManage(){
   const wrap = document.getElementById('rewardsManageWrap');
   const items = state.rewardItems || [];
   if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
-  const weeksUnbroken = computeWeeklyStreakWeeks(state.weekHistory || []);
+  const weeksUnbroken = computeWeeklyStreakWeeks(reconcileWeekHistory(state.weekHistory || [], state.dayHistory || []));
   wrap.innerHTML = items.map(item => {
     const unlimited = item.maxQty >= 9999;
     let stockLabel;

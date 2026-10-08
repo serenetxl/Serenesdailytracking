@@ -436,8 +436,8 @@
 <div id="auth-screen" class="card">
   <div class="brand" style="justify-content:center"><span class="dot"></span>SERENE // LCP</div>
   <p class="tagline" style="justify-content:center;margin-bottom:16px">Sign in to continue</p>
-  <input id="authEmail" type="email" placeholder="email" value="txlserene@gmail.com">
-  <input id="authPw" type="password" placeholder="password">
+  <input id="authEmail" type="hidden" value="txlserene@gmail.com">
+  <input id="authPw" type="password" placeholder="password" autocomplete="current-password">
   <button class="save-btn" id="authBtn" style="width:100%">Sign In</button>
   <p id="authErr" style="color:var(--rose); font-size:12.5px; margin-top:10px"></p>
 </div>
@@ -698,7 +698,21 @@
 
 <div class="toast" id="toast"></div>
 
+<script>
+/* Load guard: if the main module never starts (usually because engine.js /
+   shared.js / this page were uploaded at different times, or the browser kept
+   an old copy), say so on the sign-in screen instead of a dead button. */
+window.addEventListener('error', function(e){
+  var el = document.getElementById('authErr');
+  if(el && !window.__booted) el.textContent = 'Page failed to load: ' + (e.message || 'script error') + '. Re-upload engine.js, shared.js and this page together, then hard refresh (Ctrl+Shift+R).';
+});
+setTimeout(function(){
+  var el = document.getElementById('authErr');
+  if(!window.__booted && el && !el.textContent) el.textContent = 'Page did not finish loading. Re-upload engine.js, shared.js and this page together, then hard refresh (Ctrl+Shift+R).';
+}, 4000);
+</script>
 <script type="module">
+window.__booted = true;
 /* ==========================================================
    SERENE // LIFE CONTROL PANEL — merged with Odin tracker
    Same single-state-object architecture as the original
@@ -714,6 +728,7 @@ import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
   settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, computeWeeklyStreakWeeks,
+  reconcileWeekHistory, evaluateWeek, exerciseApprovedCount,
   logTouchpoint, pingOdin,
   DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
 } from "./shared.js";
@@ -737,7 +752,9 @@ const STAT_DEFS = [
   // key stays 'followups' so existing week history keeps working; it's now
   // weekly touchpoints with clients/prospects (not the 50-day challenge).
   { key: 'followups',    label: 'Touchpoints (clients / prospects)' },
-  { key: 'fycc',         label: 'FYCC Earned', isMoney: true, targetComputed: true }
+  { key: 'fycc',         label: 'FYCC Earned', isMoney: true, targetComputed: true },
+  // Counted automatically from the exercise proof tracker once Odin approves it.
+  { key: 'exercise',     label: 'Exercise (approved)', derived: true }
 ];
 
 const PIPELINE_STAGES = [
@@ -797,7 +814,7 @@ function weeklyFyccTarget(fromMondayStr){
   return Math.ceil(gap / weeksLeftToDeadline(fromMondayStr));
 }
 function emptyStats(){ const o = {}; STAT_DEFS.forEach(s => o[s.key] = 0); return o; }
-function defaultTargets(){ return { appointments:8, followups:10 }; }
+function defaultTargets(){ return { appointments:8, followups:10, exercise:3 }; }
 
 function defaultToday(dateStr){
   return {
@@ -848,13 +865,14 @@ function normalizeQuest(q, index){
   };
 }
 
-// One-off migration: exercise has its own tracker now so it leaves the weekly
-// targets, and touchpoints with clients/prospects moves from the old default
-// of 5 to 10. A target she set to anything other than 5 is left alone.
+// One-off migration: weekly touchpoints with clients/prospects moves from the
+// old default of 5 to 10. A target she set to anything other than 5 is left
+// alone. Exercise stays in the weekly targets (default 3) — its count is
+// derived from the approved-proof tracker rather than typed in.
 function migrateWeeklyTargets(t){
   const out = { ...t };
-  delete out.exercise;
   if(out.followups === 5) out.followups = 10;
+  if(typeof out.exercise !== 'number') out.exercise = 3;
   return out;
 }
 
@@ -890,7 +908,9 @@ function mergeWithDefaults(parsed){
     weeklyTargets: migrateWeeklyTargets({ ...base.weeklyTargets, ...(parsed.weeklyTargets||{}) }),
     currentWeek: { ...base.currentWeek, ...(parsed.currentWeek||{}), stats: { ...base.currentWeek.stats, ...((parsed.currentWeek||{}).stats||{}) } },
     today: mergedToday,
-    weekHistory: parsed.weekHistory || [],
+    // Re-derive each archived week from the day-by-day history so a late
+    // approval from Odin (or a corrected day) is reflected in the streak.
+    weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
     dayHistory: parsed.dayHistory || [],
     pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
@@ -898,8 +918,7 @@ function mergeWithDefaults(parsed){
     points: { ...base.points, ...(parsed.points||{}) },
     rewardItems: refreshConditionalRewards(
       mergeRewardItems(base.rewardItems, parsed.rewardItems),
-      { ...base.points, ...(parsed.points || {}) },
-      parsed.weekHistory || [],
+      reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
       new Date()
     ),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
@@ -930,13 +949,20 @@ function saveState(){
 }
 
 /* ---------- Daily / Weekly reset (now also settles points + pings Odin) ---------- */
+// settleDay only pays touchpoint/exercise points for proof Odin had already
+// approved at that moment. Record which ones were paid so that a later
+// approval (from odin.html) pays the rest exactly once.
+function markProofPointsAwarded(t){
+  if(t.touchpoint.logged && t.touchpoint.approved === 'approved') t.touchpoint.pointsAwarded = true;
+  if(t.exercise.approved === 'approved') t.exercise.pointsAwarded = true;
+}
 async function checkDailyReset(){
   const todayStr = fmtDate(new Date());
   if(state.today.date !== todayStr){
     const t = state.today;
     const checklistDone = t.checklist.filter(Boolean).length;
     const questsDone = t.quests.filter(q => q.status === 'completed' && q.text.trim()).length;
-    const hadActivity = checklistDone > 0 || questsDone > 0 || t.energy || t.quests.some(q => q.text.trim());
+    const hadActivity = checklistDone > 0 || questsDone > 0 || t.energy || t.quests.some(q => q.text.trim()) || t.touchpoint.logged || t.exercise.logged;
 
     // If yesterday was never submitted to Odin, settle it now as a missed/
     // incomplete day so points/streak/pings still happen even if she never
@@ -950,6 +976,7 @@ async function checkDailyReset(){
         anyUpdatePosted, streakKeeperSpent: false
       });
       state.points = newPoints;
+      markProofPointsAwarded(t);
       for(const ev of events){
         addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: t.date, pingSent: ev.ping }).catch(()=>{});
         if(ev.ping){
@@ -966,7 +993,10 @@ async function checkDailyReset(){
         journal: (t.journal && t.journal.text && t.journal.text.trim()) ? t.journal.text : null,
         touchpoint: t.touchpoint.logged, touchpointApproved: t.touchpoint.approved, touchpointPhotoUrl: t.touchpoint.photoUrl || null,
         exercise: t.exercise.logged, exerciseApproved: t.exercise.approved, exercisePhotoUrl: t.exercise.photoUrl || null,
-        submitted: t.submittedForApproval, approval: t.approval.status
+        submitted: t.submittedForApproval, approval: t.approval.status,
+        // Lets Odin's panel award touchpoint/exercise points if he approves after the day settled.
+        touchpointAwarded: !!t.touchpoint.pointsAwarded, exerciseAwarded: !!t.exercise.pointsAwarded,
+        streakKeeperUsed: !!t.streakKeeperUsed
       });
     }
 
@@ -977,35 +1007,61 @@ async function checkDailyReset(){
     }
 
     state.rewardItems = refreshRewardItems(state.rewardItems, new Date());
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.points, state.weekHistory, new Date());
+    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
     state.today = defaultToday(todayStr);
     saveState();
   }
+}
+
+function addDaysLocal(dateStr, n){
+  const d = parseDate(dateStr); d.setDate(d.getDate() + n); return fmtDate(d);
 }
 
 function checkWeeklyReset(){
   const thisMonday = mondayOf(new Date());
   if(state.currentWeek.weekStart !== thisMonday){
     const w = state.currentWeek;
-    const hadActivity = Object.values(w.stats).some(v => v > 0);
-    if(hadActivity){
-      const start = parseDate(w.weekStart);
-      const end = new Date(start); end.setDate(end.getDate() + 6);
-      const targets = { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) };
-      const metAllTargets = ['appointments', 'followups', 'fycc'].every(key => (w.stats[key] || 0) >= (targets[key] || 0));
+    // Every week is archived, even an empty one — a missing/blank week must
+    // break the weekly streak rather than silently disappear from it.
+    const targets = { ...state.weeklyTargets, fycc: weeklyFyccTarget(w.weekStart) };
+    state.weekHistory.unshift({
+      weekStart: w.weekStart, weekEnd: addDaysLocal(w.weekStart, 6), stats: { ...w.stats }, targets
+    });
+    // If the app wasn't opened for whole weeks, add those as blank (broken) weeks.
+    for(let ms = addDaysLocal(w.weekStart, 7); ms < thisMonday; ms = addDaysLocal(ms, 7)){
       state.weekHistory.unshift({
-        weekStart: w.weekStart, weekEnd: fmtDate(end), stats: w.stats,
-        targets, metAllTargets
+        weekStart: ms, weekEnd: addDaysLocal(ms, 6), stats: emptyStats(), targets: { ...state.weeklyTargets }, missed: true
       });
-    } else {
-      // No activity at all this week breaks the unbroken-weeks streak too —
-      // record it so hair-treatment-style gated rewards don't silently skip it.
-      state.weekHistory.unshift({ weekStart: w.weekStart, weekEnd: fmtDate(new Date(parseDate(w.weekStart).getTime() + 6*86400000)), stats: w.stats, targets: null, metAllTargets: false });
     }
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.points, state.weekHistory, new Date());
+    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
+    sendWeeklyRecap(w.weekStart);
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
     saveState();
   }
+}
+
+// Telegram recap of the week that just ended. Only fires when the app is
+// opened after the week rolls over (there's no server), so it can arrive late.
+function sendWeeklyRecap(weekStart){
+  const wk = state.weekHistory.find(x => x.weekStart === weekStart);
+  if(!wk) return;
+  const weeks = computeWeeklyStreakWeeks(state.weekHistory);
+  const need = (state.rewardItems.find(r => r.requiresWeeklyStreak) || {}).requiresWeeklyStreak;
+  const tg = wk.targets || {};
+  const yn = ok => ok ? '✅' : '❌';
+  const lines = [
+    `📊 <b>Weekly recap</b> ${wk.weekStart} – ${wk.weekEnd}`,
+    `${yn((wk.stats.appointments||0) >= (tg.appointments||0))} Appointments ${wk.stats.appointments||0}/${tg.appointments||0}`,
+    `${yn((wk.stats.exercise||0) >= (tg.exercise||0))} Exercise (approved) ${wk.stats.exercise||0}/${tg.exercise||0}`,
+    `• Touchpoints ${wk.stats.followups||0}/${tg.followups||0}`,
+    `• FYCC earned $${(wk.stats.fycc||0).toLocaleString('en-SG')} (target $${(tg.fycc||0).toLocaleString('en-SG')})`,
+    `${yn(wk.dailyOk)} Daily agenda cleared all 7 days`,
+    wk.unbroken ? '🔥 Week unbroken.' : '💔 Week not unbroken.',
+    `Weekly streak: ${weeks}${need ? '/' + need : ''} weeks · Daily streak ${state.points.streakDays}d (${state.points.multiplier}x) · ${state.points.total} pts`
+  ];
+  pingOdin(lines.join('\n'));
 }
 
 /* ---------- Auth ---------- */
@@ -1016,6 +1072,7 @@ document.getElementById('authBtn').addEventListener('click', async () => {
   catch(e){ document.getElementById('authErr').textContent = e.message; }
 });
 document.getElementById('signoutBtn').addEventListener('click', () => signOut(auth));
+document.getElementById('authPw').addEventListener('keydown', (e) => { if(e.key === 'Enter') document.getElementById('authBtn').click(); });
 
 onAuthStateChanged(auth, async (user) => {
   if(user){
@@ -1294,6 +1351,23 @@ function continueQuest(id){
   saveState(); renderQuests(); renderUnfinished(); renderMainQuestPrompt();
   showToast('Continued into ' + (slot === 0 ? 'Main Quest' : 'Quest ' + (slot+1)));
 }
+// For when she actually finished it but forgot to tick it off before the day
+// rolled over. It's recorded as completed (late) in her quest log. Yesterday's
+// points and streak were already settled and are NOT rewritten automatically —
+// Odin is told so he can fix them with a manual adjustment if he agrees.
+function markCarryoverDone(id){
+  const idx = state.pendingCarryover.findIndex(q => q.id === id);
+  if(idx === -1) return;
+  const q = state.pendingCarryover[idx];
+  const ok = confirm(`Mark "${q.text}" as done?\n\nYesterday's points and streak are already settled, so this won't change them — Odin will be told so he can adjust if he agrees.`);
+  if(!ok) return;
+  q.status = 'completed'; q.completedDate = fmtDate(new Date());
+  logQuestEvent(q, 'completed', { late: true });
+  state.pendingCarryover.splice(idx, 1);
+  saveState(); renderUnfinished();
+  pingOdin(`🕓 Serene says <b>${q.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</b> was actually done but not ticked off before the day ended. Points/streak for that day were already settled — adjust in your panel if you agree.`);
+  showToast('Marked done — Odin has been told');
+}
 function finalizeReschedule(id, reasonCode, reasonNote, targetDate){
   const idx = state.pendingCarryover.findIndex(q => q.id === id);
   if(idx === -1) return;
@@ -1373,6 +1447,9 @@ function renderUnfinished(){
     top.appendChild(tag); top.appendChild(text);
     item.appendChild(top);
     const actions = document.createElement('div'); actions.className = 'unfinished-actions';
+    const doneBtn = document.createElement('button');
+    doneBtn.className = 'unfinished-btn continue'; doneBtn.textContent = '✓ ALREADY DONE';
+    doneBtn.addEventListener('click', () => markCarryoverDone(q.id));
     const continueBtn = document.createElement('button');
     continueBtn.className = 'unfinished-btn continue'; continueBtn.textContent = 'CONTINUE';
     continueBtn.addEventListener('click', () => continueQuest(q.id));
@@ -1388,7 +1465,7 @@ function renderUnfinished(){
       reasonPanelOpenFor = reasonPanelOpenFor && reasonPanelOpenFor.id === q.id && reasonPanelOpenFor.action === 'cancel' ? null : { id: q.id, action: 'cancel' };
       renderUnfinished();
     });
-    actions.appendChild(continueBtn); actions.appendChild(rescheduleBtn); actions.appendChild(cancelBtn);
+    actions.appendChild(doneBtn); actions.appendChild(continueBtn); actions.appendChild(rescheduleBtn); actions.appendChild(cancelBtn);
     item.appendChild(actions);
     if(reasonPanelOpenFor && reasonPanelOpenFor.id === q.id) renderReasonPanel(item, q, reasonPanelOpenFor.action);
     wrap.appendChild(item);
@@ -1525,7 +1602,9 @@ function renderStats(){
   const grid = document.getElementById('statGrid');
   grid.innerHTML = '';
   STAT_DEFS.forEach(def => {
-    const current = state.currentWeek.stats[def.key] || 0;
+    const current = def.derived
+      ? exerciseApprovedCount(state.currentWeek.weekStart, state.today, state.dayHistory)
+      : (state.currentWeek.stats[def.key] || 0);
     const target = def.targetComputed ? weeklyFyccTarget() : (state.weeklyTargets[def.key] || 0);
     const pct = target > 0 ? Math.min(100, Math.round((current/target)*100)) : 0;
     const card = document.createElement('div'); card.className = 'stat-card';
@@ -1548,14 +1627,20 @@ function renderStats(){
       note.textContent = `auto · gap ÷ ${weeksLeftToDeadline()}wk left`;
       card.appendChild(note);
     }
-    // +/- are always on — no edit mode to toggle.
+    if(def.derived){
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:10px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;';
+      note.textContent = 'auto · counts when Odin approves your proof';
+      card.appendChild(note);
+    }
+    // +/- are always on — no edit mode to toggle (not for derived stats).
     const controls = document.createElement('div'); controls.className = 'stat-controls';
     const minus = document.createElement('button'); minus.className = 'stepper'; minus.textContent = '−';
     minus.addEventListener('click', () => { state.currentWeek.stats[def.key] = Math.max(0, current - (def.isMoney ? 100 : 1)); saveState(); renderStats(); });
     const plus = document.createElement('button'); plus.className = 'stepper'; plus.textContent = '+';
     plus.addEventListener('click', () => { state.currentWeek.stats[def.key] = current + (def.isMoney ? 100 : 1); saveState(); renderStats(); });
     controls.appendChild(minus); controls.appendChild(plus);
-    card.appendChild(controls);
+    if(!def.derived) card.appendChild(controls);
     // Targets are rarely changed, so rather than a whole edit mode, tap the
     // target number itself to change it (FYCC's target is auto-computed).
     if(!def.targetComputed){
@@ -1739,7 +1824,7 @@ async function submitDay(){
     const dailyKeeper = state.rewardItems.find(r => r.id === 'streak-keeper-daily');
     if(dailyKeeper && dailyKeeper.qty > 0){
       streakKeeperSpent = confirm("Today's agenda wasn't fully cleared. Spend a Daily Streak Keeper to protect your streak?");
-      if(streakKeeperSpent) dailyKeeper.qty -= 1;
+      if(streakKeeperSpent){ dailyKeeper.qty -= 1; t.streakKeeperUsed = true; }
     }
   }
 
@@ -1749,6 +1834,7 @@ async function submitDay(){
     anyUpdatePosted, streakKeeperSpent
   });
   state.points = newPoints;
+  markProofPointsAwarded(t);
   t.submittedForApproval = true;
   t.approval = { status: 'pending' };
   saveState();
@@ -1949,12 +2035,13 @@ function renderHistory(){
       <tr>
         <td>${w.weekStart} – ${w.weekEnd}</td>
         <td>${w.stats.appointments||0}/${(w.targets||{}).appointments||0}</td>
+        <td>${w.stats.exercise||0}/${(w.targets||{}).exercise||0}</td>
         <td>${w.stats.followups||0}/${(w.targets||{}).followups||0}</td>
         <td>$${(w.stats.fycc||0).toLocaleString('en-SG')}</td>
-        <td>${w.metAllTargets === undefined ? '—' : (w.metAllTargets ? '✓' : '✗')}</td>
+        <td>${w.unbroken === undefined ? '—' : (w.unbroken ? '✓' : '✗')}</td>
       </tr>`).join('');
     weekWrap.innerHTML = `<table class="hist-table">
-      <thead><tr><th>Week</th><th>Appts</th><th>Touchpoints</th><th>FYCC</th><th>Targets hit</th></tr></thead>
+      <thead><tr><th>Week</th><th>Appts</th><th>Exercise</th><th>Touchpoints</th><th>FYCC</th><th>Unbroken</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
 }
