@@ -4,144 +4,212 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Odin // Serene Tracker Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{ --bg:#0f1115; --panel:#181b22; --border:#2a2e38; --ink:#e7e9ee; --dim:#8a8f9c;
-  --green:#4ade80; --amber:#fbbf24; --red:#f87171; --blue:#60a5fa; }
+:root{
+  --bg:#edf1f5; --panel:#ffffff; --border:#dbe2ea; --ink:#18232f; --dim:#5f6f80;
+  --soft:#f4f7fa; --navy:#1d3a57;
+  --green:#1f8a63; --green-soft:#e0f2ea;
+  --amber:#b9770e; --amber-soft:#fbefd5;
+  --red:#c2453a; --red-soft:#f9e1de;
+  --blue:#2b64a0; --blue-soft:#e0ebf6;
+}
 *{box-sizing:border-box}
-body{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg);color:var(--ink);padding:16px;}
-h1{font-size:1.1rem;letter-spacing:.5px;margin:0 0 4px;color:var(--blue)}
-h2{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin:0 0 10px}
-.sub{color:var(--dim);font-size:.8rem;margin-bottom:16px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45;padding:0 0 48px}
+h1,h2,h3{margin:0}
+a{color:var(--blue)}
+.sub{color:var(--dim);font-size:.85rem;margin:0 0 12px}
+.wrap{max-width:880px;margin:0 auto;padding:0 16px}
+
+/* top bar */
+.top{background:var(--navy);color:#fff;padding:18px 0 74px}
+.top .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{font-size:1.05rem;font-weight:800;letter-spacing:.01em}
+.brand span{font-weight:500;opacity:.7}
+#signoutBtn{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);padding:6px 12px}
+#signoutBtn:hover{background:rgba(255,255,255,.12);border-color:#fff}
+
+/* summary: overlaps the bar */
+.summary{margin-top:-58px;display:grid;gap:10px;grid-template-columns:1fr 1fr}
+.tile{background:var(--panel);border-radius:14px;padding:14px 16px;box-shadow:0 1px 2px rgba(24,35,47,.06)}
+.tile h2{font-size:.8rem;font-weight:600;color:var(--dim);margin-bottom:4px}
+.tile .stat{font-size:1.7rem}
+.tile .sub{margin:2px 0 0;font-size:.78rem}
+.tile.lead{grid-column:1/-1;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:18px 20px}
+.tile.lead .stat{font-size:3rem;line-height:1}
+.tile.lead .side{text-align:right}
+.tile.lead .side .stat{font-size:1.5rem}
+@media(min-width:760px){.summary{grid-template-columns:repeat(4,1fr)}.tile.lead{grid-column:span 2}}
+.stat{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* sections */
+.block{margin-top:26px}
+.block > h2{font-size:1.05rem;font-weight:800;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.block > h2 small{font-weight:600;color:var(--dim);font-size:.8rem}
+.card{background:var(--panel);border-radius:14px;padding:6px 16px;box-shadow:0 1px 2px rgba(24,35,47,.06)}
+.card.pad{padding:14px 16px}
+.attn{border-left:5px solid var(--amber)}
+.live{border-left:5px solid var(--green)}
 .grid{display:grid;gap:12px}
-@media(min-width:800px){.grid-3{grid-template-columns:1fr 1fr 1fr}.grid-2{grid-template-columns:1fr 1fr}}
-.stat{font-size:1.6rem;font-weight:700}
-.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.82rem;gap:10px}
+@media(min-width:760px){.two{grid-template-columns:1fr 1fr}}
+
+.row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);font-size:.9rem;gap:12px}
 .row:last-child{border-bottom:none}
-button{font-family:inherit;font-size:.78rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:#20242e;color:var(--ink);cursor:pointer}
-button:hover{border-color:var(--blue)}
-button.approve{background:var(--green);color:#06250f;border:none}
+
+button{white-space:nowrap;font-family:inherit;font-size:.82rem;font-weight:600;padding:7px 13px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--ink);cursor:pointer;transition:background .12s,border-color .12s}
+button:hover{border-color:var(--blue);background:var(--blue-soft)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid rgba(43,100,160,.45);outline-offset:2px}
+button.approve{background:var(--green);color:#fff;border-color:var(--green)}
+button.approve:hover{background:#18754f;border-color:#18754f}
 button:disabled{opacity:.4;cursor:default}
-input{font-family:inherit;background:#20242e;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:.8rem}
-#auth-screen{max-width:320px;margin:100px auto;text-align:center}
-#auth-screen input{width:100%;margin-bottom:8px}
+input,textarea{font-family:inherit;background:#fff;color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:.88rem}
+input::placeholder{color:#97a4b2}
+
+.pill{font-size:.74rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--dim);white-space:nowrap}
+.pill.green,.pill.good{background:var(--green-soft);color:var(--green)}
+.pill.amber,.pill.okay{background:var(--amber-soft);color:var(--amber)}
+.pill.red,.pill.low{background:var(--red-soft);color:var(--red)}
+
+.kanban{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;overflow-x:auto;font-size:.82rem;padding-bottom:6px}
+.col{background:var(--soft);border-radius:12px;padding:10px}
+.col h3{font-size:.78rem;font-weight:700;color:var(--dim);margin:0 0 8px}
+.cc{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px;margin-bottom:6px}
+.cc.flag{border-color:var(--red);background:var(--red-soft)}
+.ledger-item{font-size:.85rem;padding:9px 0;border-bottom:1px solid var(--border)}
+.ledger-item:last-child{border-bottom:none}
+
+/* admin tools, collapsed */
+details.tool{background:var(--panel);border-radius:14px;box-shadow:0 1px 2px rgba(24,35,47,.06);margin-bottom:10px}
+details.tool > summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:700;font-size:.95rem;display:flex;justify-content:space-between;align-items:center}
+details.tool > summary::-webkit-details-marker{display:none}
+details.tool > summary::after{content:"+";font-size:1.2rem;color:var(--dim);font-weight:500}
+details.tool[open] > summary::after{content:"–"}
+details.tool > .inner{padding:0 16px 16px}
+
+#auth-screen{max-width:340px;margin:18vh auto 0;text-align:center;background:var(--panel);border-radius:18px;padding:28px 24px;box-shadow:0 8px 30px rgba(24,35,47,.12)}
+#auth-screen h1{font-size:1.2rem;font-weight:800;color:var(--navy);margin-bottom:2px}
+#auth-screen input{width:100%;margin-bottom:10px}
+#auth-screen button{width:100%;background:var(--navy);color:#fff;border-color:var(--navy);padding:10px}
 .hidden{display:none !important}
-.pill{font-size:.68rem;padding:2px 8px;border-radius:999px;background:#20242e}
-.pill.green{color:var(--green)}
-.pill.amber{color:var(--amber)}
-.pill.red{color:var(--red)}
-.kanban{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;overflow-x:auto;font-size:.76rem}
-.col{background:#20242e;border-radius:6px;padding:6px}
-.col h3{font-size:.7rem;color:var(--dim);margin:0 0 4px}
-.cc{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:5px;margin-bottom:5px}
-.cc.flag{border-color:var(--red)}
-.ledger-item{font-size:.76rem;padding:5px 0;border-bottom:1px solid var(--border)}
+@media(prefers-reduced-motion:reduce){*{transition:none !important}}
 </style>
 </head>
 <body>
 
-<div id="auth-screen" class="card">
-  <h1>ODIN // ADMIN</h1>
-  <p class="sub">Sign in</p>
+<div id="auth-screen">
+  <h1>Odin</h1>
+  <p class="sub">Serene's tracker. Sign in to continue.</p>
   <input id="authEmail" type="hidden" value="odinyeo5@gmail.com">
-  <input id="authPw" type="password" placeholder="password" autocomplete="current-password">
-  <button id="authBtn" style="width:100%">Sign In</button>
+  <input id="authPw" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="authBtn">Sign in</button>
   <p id="authErr" class="sub" style="color:var(--red)"></p>
 </div>
 
 <div id="app" class="hidden">
-<h1>ODIN // SERENE TRACKER — ADMIN</h1>
-<p class="sub">Overview &middot; <button id="signoutBtn">Sign out</button></p>
+<header class="top"><div class="wrap">
+  <div class="brand">Odin <span>· Serene's tracker</span></div>
+  <button id="signoutBtn">Sign out</button>
+</div></header>
 
-<div class="grid grid-3">
-  <div class="card"><h2>Points</h2><div class="stat" id="ovPoints">0</div></div>
-  <div class="card"><h2>Streak</h2><div class="stat" id="ovStreak">0d</div><div class="sub" id="ovMult"></div></div>
-  <div class="card"><h2>Touchpoint Challenge</h2><div class="stat" id="ovTouchpoint">0/50</div></div>
-</div>
+<main class="wrap">
 
-<div class="grid grid-3">
-  <div class="card"><h2>IDA Goal (FYCC)</h2><div class="stat" id="ovGoal">$0 / $0</div></div>
-  <div class="card"><h2>FYC Opened</h2><div class="stat" id="ovFycOpened">$0</div><div class="sub">Proposed stage, awaiting close</div></div>
-  <div class="card"><h2>FYC Submitted</h2><div class="stat" id="ovFycSubmitted">$0</div><div class="sub">Closed stage, awaiting inforce</div></div>
-</div>
+<section class="summary">
+  <div class="tile lead">
+    <div><h2>Points</h2><div class="stat" id="ovPoints">0</div></div>
+    <div class="side"><h2>Streak</h2><div class="stat" id="ovStreak">0d</div><div class="sub" id="ovMult"></div></div>
+  </div>
+  <div class="tile"><h2>IDA goal (FYCC)</h2><div class="stat" id="ovGoal">$0 / $0</div></div>
+  <div class="tile"><h2>Touchpoint challenge</h2><div class="stat" id="ovTouchpoint">0/50</div></div>
+  <div class="tile"><h2>FYC opened</h2><div class="stat" id="ovFycOpened">$0</div><div class="sub">Proposed, awaiting close</div></div>
+  <div class="tile"><h2>FYC submitted</h2><div class="stat" id="ovFycSubmitted">$0</div><div class="sub">Closed, awaiting inforce</div></div>
+</section>
 
-<div class="card">
-  <h2>FYC Challenges</h2>
-  <div id="fycGoalsWrap"><p class="sub">Loading…</p></div>
-</div>
+<section class="block">
+  <h2>Needs your approval</h2>
+  <div class="card attn" id="approvalCard"><div id="approvalWrap"><p class="sub">Loading…</p></div></div>
+</section>
 
-<div class="card">
-  <h2>Pending Approval</h2>
-  <div id="approvalWrap"><p class="sub">Loading…</p></div>
-</div>
+<section class="block">
+  <h2>Today, live <small>updates as Serene types</small></h2>
+  <div class="card live"><div id="liveWrap"><p class="sub">Loading…</p></div></div>
+</section>
 
-<div class="card">
+<section class="block">
   <h2>Journal</h2>
-  <div id="journalWrap"></div>
-</div>
+  <div class="card"><div id="journalWrap"></div></div>
+</section>
 
-<div class="card">
-  <h2>Weekly Summary (last 7 logged days)</h2>
-  <div id="weeklyWrap"></div>
-</div>
+<section class="block">
+  <h2>FYC challenges</h2>
+  <div class="card"><div id="fycGoalsWrap"><p class="sub">Loading…</p></div></div>
+</section>
 
-<div class="card">
-  <h2>Pipeline (activity context)</h2>
-  <div class="kanban" id="kanbanWrap"></div>
-</div>
+<section class="block">
+  <h2>Last 7 logged days</h2>
+  <div class="card"><div id="weeklyWrap"></div></div>
+</section>
 
-<div class="card">
-  <h2>Manual Point Adjustment</h2>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input id="adjAmount" type="number" placeholder="+/- points" style="width:120px">
-    <input id="adjReason" placeholder="reason" style="flex:1">
-    <button id="adjBtn" disabled>Apply</button>
-  </div>
-  <p class="sub" id="adjStatus" style="margin:8px 0 0"></p>
-</div>
+<section class="block">
+  <h2>Pipeline <small>for context</small></h2>
+  <div class="card pad"><div class="kanban" id="kanbanWrap"></div></div>
+</section>
 
-<div class="card">
-  <h2>Manual Streak Adjustment</h2>
-  <p class="sub" style="margin-bottom:8px">Adjusts streak days directly — multiplier recalculates automatically (1.5x at 7d, 2x at 35d, 2.5x at 140d). Use a negative number, or a large negative, to break a streak manually.</p>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input id="streakAdjAmount" type="number" placeholder="+/- days" style="width:120px">
-    <input id="streakAdjReason" placeholder="reason" style="flex:1">
-    <button id="streakAdjBtn" disabled>Apply</button>
-  </div>
-  <p class="sub" id="streakAdjStatus" style="margin:8px 0 0"></p>
-</div>
+<section class="block">
+  <h2>Recent ledger</h2>
+  <div class="card"><div id="ledgerWrap"></div></div>
+</section>
 
-<div class="card">
-  <h2>Manage Rewards</h2>
-  <div id="rewardsManageWrap"></div>
-  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-    <p class="sub" style="margin-bottom:8px">Add new reward</p>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-      <input id="newRewardName" placeholder="Name" style="flex:1;min-width:140px">
-      <input id="newRewardDesc" placeholder="Description" style="flex:1;min-width:140px">
-      <input id="newRewardCost" type="number" placeholder="Cost (pts)" style="width:100px">
-      <input id="newRewardMaxQty" type="number" placeholder="Max qty (blank = unlimited)" style="width:180px">
-      <button id="addRewardBtn">Add</button>
+<section class="block">
+  <h2>Admin tools</h2>
+
+  <details class="tool"><summary>Adjust points</summary><div class="inner">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="adjAmount" type="number" placeholder="+/- points" style="width:130px">
+      <input id="adjReason" placeholder="Reason" style="flex:1;min-width:160px">
+      <button id="adjBtn" disabled>Apply</button>
     </div>
-    <p class="sub" id="rewardAddStatus" style="margin:8px 0 0"></p>
-  </div>
-</div>
+    <p class="sub" id="adjStatus" style="margin:8px 0 0"></p>
+  </div></details>
 
-<div class="card">
-  <h2>Change Your Password</h2>
-  <div style="display:flex;flex-direction:column;gap:8px;max-width:280px">
-    <input id="pwCurrent" type="password" placeholder="Current password">
-    <input id="pwNew" type="password" placeholder="New password (min 6 chars)">
-    <button id="pwChangeBtn">Change Password</button>
-  </div>
-  <p class="sub" id="pwStatus" style="margin:8px 0 0"></p>
-</div>
+  <details class="tool"><summary>Adjust streak</summary><div class="inner">
+    <p class="sub">Changes streak days directly and the multiplier recalculates (1.5x at 7 days, 2x at 35, 2.5x at 140). Use a negative number to break a streak.</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="streakAdjAmount" type="number" placeholder="+/- days" style="width:130px">
+      <input id="streakAdjReason" placeholder="Reason" style="flex:1;min-width:160px">
+      <button id="streakAdjBtn" disabled>Apply</button>
+    </div>
+    <p class="sub" id="streakAdjStatus" style="margin:8px 0 0"></p>
+  </div></details>
 
-<div class="card">
-  <h2>Recent Ledger</h2>
-  <div id="ledgerWrap"></div>
-</div>
+  <details class="tool"><summary>Manage rewards</summary><div class="inner">
+    <div id="rewardsManageWrap"></div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <p class="sub">Add a reward</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <input id="newRewardName" placeholder="Name" style="flex:1;min-width:140px">
+        <input id="newRewardDesc" placeholder="Description" style="flex:1;min-width:140px">
+        <input id="newRewardCost" type="number" placeholder="Cost (pts)" style="width:110px">
+        <input id="newRewardMaxQty" type="number" placeholder="Max qty (blank = unlimited)" style="width:200px">
+        <button id="addRewardBtn">Add</button>
+      </div>
+      <p class="sub" id="rewardAddStatus" style="margin:8px 0 0"></p>
+    </div>
+  </div></details>
 
+  <details class="tool"><summary>Change your password</summary><div class="inner">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:300px">
+      <input id="pwCurrent" type="password" placeholder="Current password">
+      <input id="pwNew" type="password" placeholder="New password (min 6 characters)">
+      <button id="pwChangeBtn">Change password</button>
+    </div>
+    <p class="sub" id="pwStatus" style="margin:8px 0 0"></p>
+  </div></details>
+</section>
+
+</main>
 </div>
 
 <script>
@@ -200,7 +268,7 @@ onAuthStateChanged(auth, async (user) => {
       state = snap.data();
       document.getElementById('adjBtn').disabled = false;
       document.getElementById('streakAdjBtn').disabled = false;
-      renderOverview(); renderApprovals(); renderJournal(); renderFycGoals(); renderWeekly(); renderPipeline(); renderRewardsManage();
+      renderOverview(); renderLive(); renderApprovals(); renderJournal(); renderFycGoals(); renderWeekly(); renderPipeline(); renderRewardsManage();
     }, (err) => {
       console.error('Firestore read failed', err);
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
@@ -314,6 +382,30 @@ async function approveProof(kind, dateStr, live){
 }
 const approveExercise = (dateStr, live) => approveProof('exercise', dateStr, live);
 const approveTouchpoint = (dateStr, live) => approveProof('touchpoint', dateStr, live);
+
+// Everything Serene enters today shows here straight away — no Submit Day needed.
+// (Her journal is in the Journal card below, also live.)
+function renderLive(){
+  const wrap = document.getElementById('liveWrap');
+  const t = state.today;
+  const stLabel = { completed: '✓ done', in_progress: 'in progress', not_started: 'not started' };
+  const quests = (t.quests || []).map((q, i) => {
+    const text = (q.text || '').trim();
+    return `<div>${i === 0 ? 'Main' : 'Quest ' + (i+1)}: ${text ? escapeHtml(text) + ` <span class="sub" style="margin:0">(${stLabel[q.status] || q.status})</span>` : '<span class="sub" style="margin:0">not set yet</span>'}</div>`;
+  }).join('');
+  const proof = (label, kind, obj) => {
+    if(!obj || !obj.logged) return `<div>${label}: —</div>`;
+    const photo = obj.photoUrl ? ` · <a href="${obj.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>';
+    const btn = obj.approved === 'pending' ? ` <button class="approve" data-live-${kind}="1">Approve ${label.toLowerCase()}</button>` : '';
+    return `<div>${label}: ${obj.approved}${photo}${btn}</div>`;
+  };
+  const energy = t.energy ? `<span class="pill ${t.energy}">${t.energy}</span>` : '<span class="sub" style="margin:0">not set yet</span>';
+  wrap.innerHTML = `<div class="row" style="flex-direction:column;align-items:stretch;gap:6px">
+    <div>${t.date} · energy ${energy}${t.submittedForApproval ? ' · <span class="pill amber">submitted</span>' : ''}</div>
+    ${quests}${proof('Touchpoint', 'tp', t.touchpoint)}${proof('Exercise', 'ex', t.exercise)}</div>`;
+  const tb = wrap.querySelector('[data-live-tp]'); if(tb) tb.onclick = () => approveTouchpoint(t.date, true);
+  const eb = wrap.querySelector('[data-live-ex]'); if(eb) eb.onclick = () => approveExercise(t.date, true);
+}
 
 function renderFycGoals(){
   const wrap = document.getElementById('fycGoalsWrap');
