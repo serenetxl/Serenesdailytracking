@@ -273,8 +273,7 @@ onAuthStateChanged(auth, async (user) => {
       console.error('Firestore read failed', err);
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
     });
-    const ledgerQ = query(collection(db, "pointsLedger"), orderBy("ts", "desc"), limit(25));
-    onSnapshot(ledgerQ, (snap) => renderLedger(snap.docs.map(d => d.data())), (err) => console.error('Ledger read failed', err));
+    subscribeLedger();
   } else {
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('hidden');
@@ -488,11 +487,23 @@ function renderPipeline(){
   }).join('');
 }
 
+// Ledger shows the latest 10, with a button to load older entries 20 at a time.
+let ledgerLimit = 10, ledgerUnsub = null, ledgerCount = 0;
+function subscribeLedger(){
+  if(ledgerUnsub) ledgerUnsub();
+  const q = query(collection(db, "pointsLedger"), orderBy("ts", "desc"), limit(ledgerLimit));
+  ledgerUnsub = onSnapshot(q, (snap) => { ledgerCount = snap.size; renderLedger(snap.docs.map(d => d.data())); }, (err) => console.error('Ledger read failed', err));
+}
 function renderLedger(items){
   document.getElementById('ledgerWrap').innerHTML = items.map(item => {
     const cls = item.amount > 0 ? 'green' : item.amount < 0 ? 'red' : 'amber';
     return `<div class="ledger-item"><span class="pill ${cls}">${item.type}</span> ${escapeHtml(item.reason)} ${item.amount ? `(${item.amount > 0 ? '+' : ''}${item.amount})` : ''} — ${item.date}</div>`;
   }).join('') || '<p class="sub">No entries yet.</p>';
+  if(ledgerCount >= ledgerLimit){
+    const w = document.getElementById('ledgerWrap');
+    w.insertAdjacentHTML('beforeend', '<div style="padding:12px 0 6px;text-align:center"><button id="ledgerMore">Show older entries</button></div>');
+    document.getElementById('ledgerMore').onclick = () => { ledgerLimit += 20; subscribeLedger(); };
+  }
 }
 
 async function applyManualAdjustment(){

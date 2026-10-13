@@ -1009,6 +1009,7 @@ async function loadState(){
 }
 
 function saveState(){
+  state.updatedAt = Date.now();
   ignoreNextLocalEcho = true;
   setDoc(stateRef, state).catch(e => { console.error('Save failed', e); showToast('Could not save — check connection'); });
 }
@@ -1049,8 +1050,27 @@ function releaseScheduledQuests(){
   state.scheduledQuests = list.filter(q => !(q.rescheduledTo && q.rescheduledTo <= todayStr));
   saveState();
 }
+// Guard against a stale tab/phone overwriting newer data: before settling a day
+// (or when the app comes back to the foreground) pull the saved copy and, if it's
+// newer than ours, use it instead. Every save stamps state.updatedAt.
+async function adoptRemoteIfNewer(){
+  try{
+    const snap = await getDoc(stateRef);
+    if(snap.exists() && (snap.data().updatedAt || 0) > (state.updatedAt || 0)){
+      state = mergeWithDefaults(snap.data());
+      return true;
+    }
+  }catch(e){ console.warn('Could not check for a newer saved copy', e); }
+  return false;
+}
+document.addEventListener('visibilitychange', async () => {
+  if(document.visibilityState === 'visible' && auth.currentUser && await adoptRemoteIfNewer()){
+    await checkDailyReset(); renderAll();
+  }
+});
 async function checkDailyReset(){
   const todayStr = fmtDate(new Date());
+  if(state.today.date !== todayStr) await adoptRemoteIfNewer(); // don't settle from a stale copy
   // A quest can't be "in progress" from an earlier day: if one still carries
   // yesterday's start time (e.g. it was carried over), reset it to Not Started.
   let fixedStale = false;
@@ -1071,7 +1091,8 @@ async function checkDailyReset(){
     // opened the app to hit "Submit Day".
     if(!t.submittedForApproval){
       // Work dailies are her own private system — they don't count as an update to Odin.
-      const anyUpdatePosted = questsDone > 0 || !!t.energy || t.touchpoint.logged;
+      // Posting the day's agenda to Odin counts as an update (her rule: report the 3 agendas AND do them).
+      const anyUpdatePosted = questsDone > 0 || !!t.energy || t.touchpoint.logged || !!t.agendaPinged;
       const { points: newPoints, events } = settleDay(state.points, {
         date: t.date, questsCompleted: questsDone, totalQuests: 3,
         touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
@@ -1980,7 +2001,7 @@ async function submitDay(){
   const questsCompleted = t.quests.filter(q => q.status === 'completed').length;
   const totalQuests = 3;
   // Work dailies are her own private system — they don't count as an update to Odin.
-  const anyUpdatePosted = questsCompleted > 0 || !!t.energy || t.touchpoint.logged;
+  const anyUpdatePosted = questsCompleted > 0 || !!t.energy || t.touchpoint.logged || !!t.agendaPinged;
   const allCleared = questsCompleted >= totalQuests;
 
   let streakKeeperSpent = false;
