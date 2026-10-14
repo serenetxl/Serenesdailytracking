@@ -81,6 +81,20 @@ input::placeholder{color:#97a4b2}
 .ledger-item{font-size:.85rem;padding:9px 0;border-bottom:1px solid var(--border)}
 .ledger-item:last-child{border-bottom:none}
 
+
+/* journal */
+details.jentry{border-bottom:1px solid var(--border);padding:12px 0}
+details.jentry:last-of-type{border-bottom:none}
+details.jentry > summary{list-style:none;cursor:pointer}
+details.jentry > summary::-webkit-details-marker{display:none}
+.jhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.92rem}
+.jwords{margin-left:auto;color:var(--dim);font-size:.78rem}
+.jpreview{margin-top:6px;color:var(--dim);font-size:.88rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+details.jentry[open] .jpreview{display:none}
+.jfull{margin-top:10px;max-width:62ch;line-height:1.65;font-size:.95rem}
+.jfull p{margin:0 0 .8em}
+.jfull p:last-child{margin-bottom:0}
+
 /* admin tools, collapsed */
 details.tool{background:var(--panel);border-radius:14px;box-shadow:0 1px 2px rgba(24,35,47,.06);margin-bottom:10px}
 details.tool > summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:700;font-size:.95rem;display:flex;justify-content:space-between;align-items:center}
@@ -424,39 +438,50 @@ function renderFycGoals(){
   }).join('');
 }
 
+// Journal: one card per day with the mood up front, a two-line preview, and the
+// full text on tap. Open/closed state is remembered so live updates (she's typing)
+// don't snap entries shut.
+let journalLimit = 7;
+const journalOpen = new Set();
+function niceDate(ds){
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 function renderJournal(){
   const wrap = document.getElementById('journalWrap');
   const entries = [];
   const t = state.today;
   if(t.journal && t.journal.text && t.journal.text.trim()){
-    entries.push({ date: t.date, text: t.journal.text, live: true });
+    entries.push({ date: t.date, text: t.journal.text.trim(), energy: t.energy, live: true });
   }
   (state.dayHistory || []).forEach(d => {
-    if(d.journal && d.journal.trim()) entries.push({ date: d.date, text: d.journal, live: false });
+    if(d.journal && d.journal.trim()) entries.push({ date: d.date, text: d.journal.trim(), energy: d.energy, live: false });
   });
-  if(!entries.length){ wrap.innerHTML = '<p class="sub">No journal entries yet.</p>'; return; }
-  wrap.innerHTML = entries.slice(0, 20).map((e, i) => {
-    const preview = e.text.length > 60 ? e.text.slice(0, 60) + '…' : e.text;
-    return `
-    <div class="row" style="flex-direction:column;align-items:stretch">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <span>${e.date}${e.live ? ' <span class="pill amber">today</span>' : ''} — <span class="sub" style="margin:0" id="jpreview-${i}">${escapeHtml(preview)}</span></span>
-        <button data-journal-toggle="${i}">Read</button>
-      </div>
-      <div id="jfull-${i}" class="sub hidden" style="white-space:pre-wrap;margin-top:6px">${escapeHtml(e.text)}</div>
-    </div>`;
-  }).join('');
-  entries.slice(0, 20).forEach((e, i) => {
-    const btn = wrap.querySelector(`[data-journal-toggle="${i}"]`);
-    btn.onclick = () => {
-      const full = document.getElementById(`jfull-${i}`);
-      const preview = document.getElementById(`jpreview-${i}`);
-      const open = !full.classList.contains('hidden');
-      full.classList.toggle('hidden');
-      preview.classList.toggle('hidden', !open);
-      btn.textContent = open ? 'Read' : 'Hide';
-    };
+  if(!entries.length){ wrap.innerHTML = '<p class="sub" style="padding:10px 0">No journal entries yet.</p>'; return; }
+  const shown = entries.slice(0, journalLimit);
+  const moodWord = { low: 'Low energy', okay: 'Okay energy', good: 'Good energy' };
+  wrap.innerHTML = shown.map((e, i) => {
+    const words = e.text.split(/\s+/).filter(Boolean).length;
+    const mood = e.energy ? `<span class="pill ${e.energy}">${moodWord[e.energy] || e.energy}</span>` : '<span class="pill">No energy set</span>';
+    const open = journalOpen.has(e.date) || (i === 0 && !journalOpen.has('closed:' + e.date));
+    return `<details class="jentry" data-jdate="${e.date}" ${open ? 'open' : ''}>
+      <summary>
+        <div class="jhead"><strong>${niceDate(e.date)}</strong>${e.live ? ' <span class="pill amber">today</span>' : ''} ${mood}<span class="jwords">${words} words</span></div>
+        <div class="jpreview">${escapeHtml(e.text)}</div>
+      </summary>
+      <div class="jfull">${escapeHtml(e.text).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')}</div>
+    </details>`;
+  }).join('') + (entries.length > journalLimit
+    ? '<div style="padding:12px 0 8px;text-align:center"><button id="journalMore">Show older entries</button></div>' : '');
+  wrap.querySelectorAll('details.jentry').forEach(d => {
+    d.addEventListener('toggle', () => {
+      const k = d.dataset.jdate;
+      if(d.open){ journalOpen.add(k); journalOpen.delete('closed:' + k); }
+      else { journalOpen.delete(k); journalOpen.add('closed:' + k); }
+    });
   });
+  const more = document.getElementById('journalMore');
+  if(more) more.onclick = () => { journalLimit += 7; renderJournal(); };
 }
 
 function renderWeekly(){
