@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
 <title>Serene // Life Control Panel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +24,9 @@
     --rose: #d8749a;
     --rose-soft: rgba(216,116,154,0.14);
     --track: #efebf9;
+    --hover-border: #c9c3dc;
+    --field: #ffffff;
+    color-scheme: light;
     --radius: 14px;
     --radius-sm: 10px;
     --font-display: 'Space Grotesk', sans-serif;
@@ -30,6 +34,37 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
+  /* Follows the phone/computer setting automatically */
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #15131d;
+      --bg-elev: #1e1b2a;
+      --card: #1e1b2a;
+      --card-border: #302c43;
+      --ink: #ece9f7;
+      --ink-dim: #aaa5c0;
+      --ink-faint: #7f7a96;
+      --gold: #eea46c;
+      --gold-soft: rgba(238,164,108,0.16);
+      --teal: #5fc5a2;
+      --teal-soft: rgba(95,197,162,0.16);
+      --rose: #e68cb0;
+      --rose-soft: rgba(230,140,176,0.16);
+      --track: #2b2739;
+      --hover-border: #4a4562;
+      --field: #262234;
+      color-scheme: dark;
+    }
+    body{
+      background:
+        radial-gradient(circle at 15% -10%, rgba(238,164,108,0.07), transparent 45%),
+        radial-gradient(circle at 100% 10%, rgba(95,197,162,0.05), transparent 40%),
+        var(--bg);
+    }
+    .card, .insight-card, .kanban-col{ box-shadow: none; }
+  }
+
+  :where(input, textarea, select){ background: var(--field); color: var(--ink); }
   *{ box-sizing: border-box; }
   html, body{ margin:0; padding:0; }
   body{
@@ -66,7 +101,7 @@
     cursor:pointer; transition: all .15s ease;
   }
   nav.tabs button.active{ background: var(--gold-soft); color: var(--gold); border-color: rgba(221,143,92,0.4); }
-  nav.tabs button:hover:not(.active){ color: var(--ink); border-color:#3a3f52; }
+  nav.tabs button:hover:not(.active){ color: var(--ink); border-color:var(--hover-border); }
 
   section.view{ display:none; }
   section.view.active{ display:block; }
@@ -133,8 +168,8 @@
 
 
   /* To-do dump */
-  .td-input{ width:100%; padding:9px 11px; border-radius:10px; border:1px solid var(--card-border); font-family:inherit; font-size:14px; box-sizing:border-box; resize:vertical; background:#fff; color:var(--ink); }
-  .td-input:focus{ outline:none; border-color:#c9c3dc; }
+  .td-input{ width:100%; padding:9px 11px; border-radius:10px; border:1px solid var(--card-border); font-family:inherit; font-size:14px; box-sizing:border-box; resize:vertical; background:var(--field); color:var(--ink); }
+  .td-input:focus{ outline:none; border-color:var(--hover-border); }
   .td-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
   .td-group{ margin-top:16px; }
   .td-group-title{ font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--ink-dim); margin-bottom:4px; display:flex; gap:8px; align-items:baseline; }
@@ -159,6 +194,9 @@
   .quest-steps label{ display:flex; gap:8px; align-items:flex-start; font-size:13.5px; padding:2px 0; cursor:pointer; }
   .quest-steps label.done span{ text-decoration: line-through; color: var(--ink-faint); }
   .quest-steps input{ accent-color: var(--teal); margin-top:3px; }
+  .quest-steps label span{ flex:1; }
+  .quest-step-del{ background:none; border:0; color:var(--ink-faint); cursor:pointer; font-size:12px; padding:0 4px; }
+  .quest-step-add{ width:100%; margin-top:6px; padding:7px 10px; font-size:13px; border:1px solid var(--line, #e5e0ea); border-radius:10px; background:transparent; color:inherit; }
 
   /* Quests */
   .quest{ padding:10px 0; border-bottom:1px solid var(--card-border); }
@@ -202,7 +240,7 @@
     padding:4px 11px; border-radius:999px; font-size:11.5px; font-weight:600; cursor:pointer;
     font-family: var(--font-body); transition: all .15s ease; touch-action: manipulation;
   }
-  .quest-action-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .quest-action-btn:hover{ border-color:var(--hover-border); color: var(--ink); }
   .quest-action-btn.start{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
   .quest-action-btn.done-btn{ background: var(--teal-soft); border-color: rgba(70,163,132,0.4); color: var(--teal); }
 
@@ -221,7 +259,7 @@
     padding:6px 13px; border-radius:8px; font-size:12.5px; font-weight:600; cursor:pointer;
     font-family: var(--font-body); transition: all .15s ease;
   }
-  .unfinished-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .unfinished-btn:hover{ border-color:var(--hover-border); color: var(--ink); }
   .unfinished-btn.continue{ background: var(--teal-soft); border-color: rgba(70,163,132,0.4); color: var(--teal); }
   .unfinished-btn.reschedule{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
   .unfinished-btn.cancel{ background: var(--rose-soft); border-color: rgba(216,116,154,0.4); color: var(--rose); }
@@ -302,7 +340,7 @@
     padding:9px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family: var(--font-body);
     display:flex; align-items:center; gap:7px;
   }
-  .ghost-btn:hover{ border-color:#3a3f52; color: var(--ink); }
+  .ghost-btn:hover{ border-color:var(--hover-border); color: var(--ink); }
   .ghost-btn:disabled{ opacity:0.5; cursor:default; }
   input[type=file]{ display:none; }
 
@@ -359,7 +397,7 @@
     padding:9px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
     font-family: var(--font-body); transition: all .15s ease;
   }
-  .timer-btn:hover{ border-color:#c9c3dc; color: var(--ink); }
+  .timer-btn:hover{ border-color:var(--hover-border); color: var(--ink); }
   .timer-btn.primary{ background: var(--gold-soft); border-color: rgba(221,143,92,0.4); color: var(--gold); }
   .timer-btn.primary:hover{ background: rgba(221,143,92,0.26); }
 
@@ -477,7 +515,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 10 Oct</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 21 Oct</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -1447,6 +1485,7 @@ function maybePingAgenda(){
   showToast('Agenda sent to Odin');
 }
 
+const questStepsOpen = new Set();  // quest ids whose step box is expanded
 function renderQuests(){
   const wrap = document.getElementById('questsList');
   wrap.innerHTML = '';
@@ -1458,6 +1497,7 @@ function renderQuests(){
     const locked = i === 0 && mainLocked && !!q.text.trim();
     const row = document.createElement('div');
     row.className = 'quest' + (i === 0 ? ' main' : '') + (q.status === 'completed' ? ' done' : '');
+    row.dataset.hadText = q.text.trim() ? '1' : '0';
 
     const top = document.createElement('div');
     top.className = 'quest-top';
@@ -1483,7 +1523,11 @@ function renderQuests(){
     });
     // 'change' fires when she leaves the field, so the ping goes out once the
     // third agenda item is actually written, not mid-keystroke.
-    input.addEventListener('change', maybePingAgenda);
+    input.addEventListener('change', () => {
+      // First time text appears (or it's cleared), redraw so the Done/Start/steps buttons show up.
+      if(!!q.text.trim() !== (row.dataset.hadText === '1')) renderQuests();
+      maybePingAgenda();
+    });
     top.appendChild(input);
     row.appendChild(top);
 
@@ -1532,18 +1576,58 @@ function renderQuests(){
         undoBtn.addEventListener('click', () => undoCompleteQuest(i));
         meta.appendChild(undoBtn);
       }
-      row.appendChild(meta);
-      // Steps from the linked to-do show right under the quest so it's never vague.
+      // Steps: a linked to-do keeps its steps on the to-do (so both stay in sync);
+      // a quest typed straight into the agenda keeps its own steps on the quest.
+      if(!q.id){ q.id = genId('q'); q.createdDate = q.createdDate || fmtDate(new Date()); }
       const linked = q.todoId ? (state.todos || []).find(x => x.id === q.todoId) : null;
-      if(linked && (linked.steps || []).length){
+      const stepList = linked ? (linked.steps = linked.steps || []) : (q.steps = q.steps || []);
+      const stepsOpen = questStepsOpen.has(q.id);
+      if(q.status !== 'completed'){
+        const sb = document.createElement('button');
+        sb.className = 'quest-action-btn';
+        const sdn = stepList.filter(x => x.done).length;
+        sb.textContent = (stepsOpen ? '▾ ' : '▸ ') + (stepList.length ? `steps ${sdn}/${stepList.length}` : 'add steps');
+        sb.addEventListener('click', () => {
+          if(questStepsOpen.has(q.id)) questStepsOpen.delete(q.id); else questStepsOpen.add(q.id);
+          renderQuests();
+        });
+        meta.appendChild(sb);
+      }
+      row.appendChild(meta);
+      if(stepList.length || stepsOpen){
         const box = document.createElement('div'); box.className = 'quest-steps';
-        linked.steps.forEach(st => {
+        stepList.forEach(st => {
           const lab = document.createElement('label'); lab.className = st.done ? 'done' : '';
           const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!st.done;
           cb.addEventListener('change', () => { st.done = cb.checked; saveState(); renderQuests(); renderTodos(); });
           const sp = document.createElement('span'); sp.textContent = st.text;
-          lab.appendChild(cb); lab.appendChild(sp); box.appendChild(lab);
+          lab.appendChild(cb); lab.appendChild(sp);
+          if(q.status !== 'completed'){
+            const del = document.createElement('button');
+            del.className = 'quest-step-del'; del.type = 'button'; del.textContent = '✕'; del.title = 'Remove step';
+            del.addEventListener('click', e => {
+              e.preventDefault();
+              const k = stepList.indexOf(st); if(k > -1) stepList.splice(k, 1);
+              saveState(); renderQuests(); renderTodos();
+            });
+            lab.appendChild(del);
+          }
+          box.appendChild(lab);
         });
+        if(stepsOpen && q.status !== 'completed'){
+          const add = document.createElement('input');
+          add.type = 'text'; add.className = 'quest-step-add'; add.placeholder = 'Add a small step, press Enter';
+          add.addEventListener('keydown', e => {
+            if(e.key !== 'Enter') return;
+            e.preventDefault();
+            const v = add.value.trim(); if(!v) return;
+            stepList.push({ id: genId('s'), text: v, done: false });
+            saveState(); renderQuests(); renderTodos();
+            const again = document.querySelectorAll('#questsList .quest')[i];
+            const inp = again && again.querySelector('.quest-step-add'); if(inp) inp.focus();
+          });
+          box.appendChild(add);
+        }
         row.appendChild(box);
       }
     }
