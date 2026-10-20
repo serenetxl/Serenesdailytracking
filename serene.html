@@ -131,6 +131,35 @@
   }
   .save-btn:hover{ background: rgba(221,143,92,0.26); }
 
+
+  /* To-do dump */
+  .td-input{ width:100%; padding:9px 11px; border-radius:10px; border:1px solid var(--card-border); font-family:inherit; font-size:14px; box-sizing:border-box; resize:vertical; background:#fff; color:var(--ink); }
+  .td-input:focus{ outline:none; border-color:#c9c3dc; }
+  .td-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  .td-group{ margin-top:16px; }
+  .td-group-title{ font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--ink-dim); margin-bottom:4px; display:flex; gap:8px; align-items:baseline; }
+  .td-group-title.overdue{ color: var(--rose); }
+  .td-item{ padding:9px 0; border-bottom:1px solid var(--card-border); }
+  .td-item:last-child{ border-bottom:none; }
+  .td-main{ display:flex; align-items:flex-start; gap:10px; }
+  .td-main input[type=checkbox]{ margin-top:3px; width:17px; height:17px; flex-shrink:0; accent-color: var(--teal); }
+  .td-text{ flex:1; font-size:14.5px; line-height:1.4; }
+  .td-item.done .td-text{ text-decoration: line-through; color: var(--ink-faint); }
+  .td-chip{ font-family: var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:999px; background: var(--track); color: var(--ink-dim); white-space:nowrap; }
+  .td-chip.overdue{ background: var(--rose-soft); color: var(--rose); }
+  .td-chip.today{ background: var(--gold-soft); color: var(--gold); }
+  .td-meta{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0 0 27px; }
+  .td-steps{ margin:8px 0 0 27px; }
+  .td-step{ display:flex; gap:8px; align-items:flex-start; font-size:13.5px; padding:3px 0; }
+  .td-step.done span{ text-decoration: line-through; color: var(--ink-faint); }
+  .td-step button{ margin-left:auto; background:none; border:none; color: var(--ink-faint); cursor:pointer; font-size:12px; }
+  .td-sort{ margin-top:12px; padding:12px; border-radius:12px; background: var(--bg-elev); }
+  .td-sort ol{ margin:0 0 10px; padding-left:18px; font-size:13px; color: var(--ink-dim); line-height:1.6; }
+  .quest-steps{ margin:8px 0 0 32px; }
+  .quest-steps label{ display:flex; gap:8px; align-items:flex-start; font-size:13.5px; padding:2px 0; cursor:pointer; }
+  .quest-steps label.done span{ text-decoration: line-through; color: var(--ink-faint); }
+  .quest-steps input{ accent-color: var(--teal); margin-top:3px; }
+
   /* Quests */
   .quest{ padding:10px 0; border-bottom:1px solid var(--card-border); }
   .quest:last-child{ border-bottom:none; }
@@ -544,6 +573,31 @@
       <div id="questsList"></div>
     </div>
 
+
+    <!-- To-do dump: brain dump, deadlines, steps, and slotting into today's quests -->
+    <div class="card" id="todoCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">✎</span>To-do dump</div>
+        <button class="edit-btn" id="todoSortToggle">Sort with AI</button>
+      </div>
+      <div class="empty-note" style="padding:0 0 10px">Dump anything, one per line. Add a deadline by typing "by fri", "by 25 Oct" or "by tomorrow" at the end. Tap "→ quest" to slot one into today.</div>
+      <textarea id="todoDump" class="td-input" rows="3" placeholder="send Audrey's comparison by fri&#10;renew licence by 25 Oct&#10;plan gameplan for 20k"></textarea>
+      <div class="td-row"><button class="timer-btn primary" id="todoAddBtn">Add to list</button><span class="empty-note" style="padding:0" id="todoAddMsg"></span></div>
+
+      <div class="td-sort" id="todoSortPanel" style="display:none;">
+        <ol>
+          <li>Tap <b>Copy list + prompt</b>.</li>
+          <li>Paste it into any chatbot (Claude, ChatGPT, Gemini).</li>
+          <li>Copy its reply and paste it into the box below, then tap <b>Apply answer</b>.</li>
+        </ol>
+        <div class="td-row" style="margin-top:0"><button class="timer-btn primary" id="todoCopyBtn">Copy list + prompt</button></div>
+        <textarea id="todoPaste" class="td-input" rows="5" style="margin-top:10px" placeholder="Paste the chatbot's answer here"></textarea>
+        <div class="td-row"><button class="timer-btn primary" id="todoApplyBtn">Apply answer</button><span class="empty-note" style="padding:0" id="todoApplyMsg"></span></div>
+      </div>
+
+      <div id="todoList"></div>
+    </div>
+
     <!-- Morning Dailies Focus Timer -->
     <div class="card timer-card">
       <div class="timer-label" id="timerLabel">MORNING DAILIES</div>
@@ -886,6 +940,7 @@ function defaultState(){
     dayHistory: [],
     pipeline: { cases: [] },
     fycGoals: [ JSON.parse(JSON.stringify(LEAGUE_CHALLENGE_GOAL)) ],
+    todos: [],
     pendingCarryover: [],
     questLog: [],
     points: { total: 0, streakDays: 0, multiplier: 1, lastDayProcessed: null },
@@ -969,6 +1024,7 @@ function mergeWithDefaults(parsed){
     dayHistory: parsed.dayHistory || [],
     pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
     fycGoals: Array.isArray(parsed.fycGoals) ? parsed.fycGoals : base.fycGoals,
+    todos: Array.isArray(parsed.todos) ? parsed.todos : [],
     // Weekly points only apply to weeks from this Monday on (no retroactive payout).
     scheduledQuests: Array.isArray(parsed.scheduledQuests) ? parsed.scheduledQuests : [],
     weeklyPayFrom: parsed.weeklyPayFrom || mondayOf(new Date()),
@@ -1346,7 +1402,8 @@ function completeQuest(i){
   q.status = 'completed'; q.completedDate = fmtDate(new Date());
   if(!q.id) q.id = genId('q');
   logQuestEvent(q, 'completed');
-  saveState(); renderQuests(); renderMainQuestPrompt();
+  if(q.todoId) setTodoDone(q.todoId, true); // finishing the quest ticks the linked to-do
+  saveState(); renderQuests(); renderTodos(); renderMainQuestPrompt();
 }
 // Reschedule / give up on a quest that's still open today. It moves into the
 // Unfinished card (which asks for the reason and the new date), and the slot
@@ -1371,7 +1428,8 @@ function undoCompleteQuest(i){
   const todayStr = fmtDate(new Date());
   const logIdx = state.questLog.findIndex(e => e.id === q.id && e.status === 'completed' && e.resolvedDate === todayStr);
   if(logIdx !== -1) state.questLog.splice(logIdx, 1);
-  saveState(); renderQuests(); renderMainQuestPrompt();
+  if(q.todoId) setTodoDone(q.todoId, false);
+  saveState(); renderQuests(); renderTodos(); renderMainQuestPrompt();
   showToast('Undone');
 }
 
@@ -1475,6 +1533,19 @@ function renderQuests(){
         meta.appendChild(undoBtn);
       }
       row.appendChild(meta);
+      // Steps from the linked to-do show right under the quest so it's never vague.
+      const linked = q.todoId ? (state.todos || []).find(x => x.id === q.todoId) : null;
+      if(linked && (linked.steps || []).length){
+        const box = document.createElement('div'); box.className = 'quest-steps';
+        linked.steps.forEach(st => {
+          const lab = document.createElement('label'); lab.className = st.done ? 'done' : '';
+          const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!st.done;
+          cb.addEventListener('change', () => { st.done = cb.checked; saveState(); renderQuests(); renderTodos(); });
+          const sp = document.createElement('span'); sp.textContent = st.text;
+          lab.appendChild(cb); lab.appendChild(sp); box.appendChild(lab);
+        });
+        row.appendChild(box);
+      }
     }
     wrap.appendChild(row);
   });
@@ -2115,6 +2186,281 @@ function wireFycGoals(){
   });
 }
 
+
+/* ---------- To-do dump ---------- */
+const TD_MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const TD_DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
+const todoOpen = new Set();      // todo ids whose steps are expanded
+const todoShowAll = new Set();   // group keys expanded beyond the first 5
+function tdDaysBetween(a, b){ return Math.round((parseDate(b) - parseDate(a)) / 86400000); }
+function tdAddDays(dateStr, n){ const d = parseDate(dateStr); d.setDate(d.getDate() + n); return fmtDate(d); }
+function tdMk(y, m, d){ const dt = new Date(y, m, d); return (dt.getMonth() === m && dt.getDate() === d) ? fmtDate(dt) : null; }
+// Understands: today, tomorrow/tmr, mon..sun (next one, today counts), 25 oct, oct 25, 25/10, 25/10/26, 2026-10-25.
+function parseDateWord(raw){
+  const s = String(raw || '').trim().toLowerCase().replace(/[.,]$/, '');
+  const today = fmtDate(new Date());
+  const yr = new Date().getFullYear();
+  if(!s) return null;
+  if(s === 'today') return today;
+  if(s === 'tomorrow' || s === 'tmr' || s === 'tmrw') return tdAddDays(today, 1);
+  let m;
+  if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return tdMk(+m[1], +m[2]-1, +m[3]);
+  if((m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/))){
+    let y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : yr;
+    let r = tdMk(y, +m[2]-1, +m[1]);
+    if(r && !m[3] && tdDaysBetween(today, r) < -90) r = tdMk(y + 1, +m[2]-1, +m[1]);
+    return r;
+  }
+  const mi = w => TD_MONTHS.indexOf(w.slice(0, 3));
+  if((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})(?:\s+(\d{4}))?$/)) && mi(m[2]) >= 0){
+    let y = m[3] ? +m[3] : yr; let r = tdMk(y, mi(m[2]), +m[1]);
+    if(r && !m[3] && tdDaysBetween(today, r) < -90) r = tdMk(y + 1, mi(m[2]), +m[1]);
+    return r;
+  }
+  if((m = s.match(/^([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{4}))?$/)) && mi(m[1]) >= 0){
+    let y = m[3] ? +m[3] : yr; let r = tdMk(y, mi(m[1]), +m[2]);
+    if(r && !m[3] && tdDaysBetween(today, r) < -90) r = tdMk(y + 1, mi(m[1]), +m[2]);
+    return r;
+  }
+  const di = TD_DAYS.indexOf(s.slice(0, 3));
+  if(di >= 0 && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*$/.test(s)){
+    const now = new Date(); const diff = (di - now.getDay() + 7) % 7;
+    return tdAddDays(today, diff);
+  }
+  return null;
+}
+// "send comparison by fri" -> { text: "send comparison", deadline: "2026-10-23" }
+function parseTodoLine(line){
+  const text = line.trim().replace(/^(?:[-*•]|\d+[.)])\s+/, '').trim();
+  let m = text.match(/^(.*\S)\s+(?:by|due|before)\s+(.+)$/i) || text.match(/^(.*\S)\s+@\s*(.+)$/);
+  if(m){ const d = parseDateWord(m[2]); if(d) return { text: m[1].trim(), deadline: d }; }
+  m = text.match(/^(.*\S)\s*\(([^()]+)\)\s*$/);
+  if(m){ const d = parseDateWord(m[2]); if(d) return { text: m[1].trim(), deadline: d }; }
+  return { text, deadline: '' };
+}
+function tdNorm(x){ return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function newTodo(text, deadline){
+  return { id: genId('t'), text, deadline: deadline || '', done: false, doneAt: null, bucket: null, bucketDate: null, note: '', steps: [], createdAt: fmtDate(new Date()) };
+}
+function addTodosFromText(raw){
+  const lines = String(raw || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
+  let n = 0;
+  lines.forEach(line => {
+    const p = parseTodoLine(line);
+    if(!p.text) return;
+    state.todos.push(newTodo(p.text, p.deadline)); n++;
+  });
+  if(n){ saveState(); renderTodos(); }
+  return n;
+}
+function todoGroupOf(t, today){
+  if(t.done) return 'done';
+  if(t.bucket === 'drop') return 'drop';
+  if(t.bucket === 'today' && t.bucketDate === today) return 'today';
+  if(t.deadline){
+    const d = tdDaysBetween(today, t.deadline);
+    return d < 0 ? 'overdue' : d === 0 ? 'today' : d <= 7 ? 'week' : 'later';
+  }
+  if(t.bucket === 'week') return 'week';
+  if(t.bucket === 'later') return 'later';
+  return 'unsorted';
+}
+function deadlineLabel(dl, today){
+  const d = tdDaysBetween(today, dl);
+  const nice = parseDate(dl).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
+  if(d < 0) return `${nice} · ${-d}d overdue`;
+  if(d === 0) return 'Today';
+  if(d === 1) return 'Tomorrow';
+  return nice;
+}
+const TD_GROUPS = [
+  ['overdue', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['later', 'Later'],
+  ['unsorted', 'No deadline'], ['drop', 'Maybe drop'], ['done', 'Done']
+];
+function renderTodos(){
+  const wrap = document.getElementById('todoList');
+  if(!wrap) return;
+  const today = fmtDate(new Date());
+  const todos = state.todos || [];
+  if(!todos.length){ wrap.innerHTML = '<div class="empty-note">Nothing here yet. Dump whatever is on your mind above.</div>'; return; }
+  const inQuests = new Set(state.today.quests.filter(q => q.text.trim() && q.todoId).map(q => q.todoId));
+  const groups = {};
+  todos.forEach(t => { (groups[todoGroupOf(t, today)] = groups[todoGroupOf(t, today)] || []).push(t); });
+  const rowHtml = t => {
+    const steps = t.steps || [];
+    const sd = steps.filter(x => x.done).length;
+    const open = todoOpen.has(t.id);
+    const chip = t.deadline && !t.done ? `<span class="td-chip ${tdDaysBetween(today, t.deadline) < 0 ? 'overdue' : tdDaysBetween(today, t.deadline) === 0 ? 'today' : ''}">${escHtml(deadlineLabel(t.deadline, today))}</span>` : '';
+    const quest = inQuests.has(t.id) ? '<span class="td-chip today">in today\'s quests</span>' : (!t.done ? `<button class="quest-action-btn start" data-act="quest" data-id="${t.id}">→ quest</button>` : '');
+    const stepsBtn = !t.done ? `<button class="quest-action-btn" data-act="open" data-id="${t.id}">${open ? '▾' : '▸'} ${steps.length ? `steps ${sd}/${steps.length}` : 'add steps'}</button>` : '';
+    const stepsHtml = open ? `<div class="td-steps">
+      ${steps.map(x => `<div class="td-step ${x.done ? 'done' : ''}"><input type="checkbox" data-act="step-toggle" data-id="${t.id}" data-sid="${x.id}" ${x.done ? 'checked' : ''}><span>${escHtml(x.text)}</span><button data-act="step-del" data-id="${t.id}" data-sid="${x.id}" title="Remove step">✕</button></div>`).join('')}
+      <div class="td-row"><input class="td-input" style="flex:1;padding:7px 10px;font-size:13.5px" data-act="step-input" data-id="${t.id}" placeholder="Next small step, then Enter"></div></div>` : '';
+    const note = t.note && !t.done ? `<div class="empty-note" style="padding:4px 0 0 27px;font-size:12px">${escHtml(t.note)}</div>` : '';
+    return `<div class="td-item ${t.done ? 'done' : ''}" data-tid="${t.id}">
+      <div class="td-main"><input type="checkbox" data-act="toggle" data-id="${t.id}" ${t.done ? 'checked' : ''}><span class="td-text">${escHtml(t.text)}</span>${chip}</div>
+      ${note}
+      <div class="td-meta">${quest}${stepsBtn}
+        ${t.done ? '' : `<input type="date" data-act="date" data-id="${t.id}" value="${t.deadline || ''}" style="padding:3px 6px;border-radius:8px;border:1px solid var(--card-border);font-size:12px;font-family:inherit" title="Deadline">`}
+        <button class="quest-action-btn" data-act="del" data-id="${t.id}" title="Delete">✕</button></div>
+      ${stepsHtml}</div>`;
+  };
+  const sortFn = (a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999') || a.createdAt.localeCompare(b.createdAt);
+  let html = '';
+  TD_GROUPS.forEach(([key, label]) => {
+    const list = (groups[key] || []).slice().sort(sortFn);
+    if(!list.length) return;
+    const cap = key === 'done' ? 3 : 5;
+    const all = todoShowAll.has(key);
+    const shown = all ? list : list.slice(0, cap);
+    html += `<div class="td-group"><div class="td-group-title ${key === 'overdue' ? 'overdue' : ''}">${label} <span class="td-chip">${list.length}</span>${key === 'done' ? ' <button class="quest-action-btn" data-act="clear-done">Clear done</button>' : ''}</div>
+      ${shown.map(rowHtml).join('')}
+      ${list.length > cap ? `<button class="quest-action-btn" data-act="more" data-g="${key}">${all ? 'Show fewer' : `Show all ${list.length}`}</button>` : ''}</div>`;
+  });
+  // keep typing focus if she is in a step box
+  const active = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.act === 'step-input' ? document.activeElement.dataset.id : null;
+  wrap.innerHTML = html;
+  if(active){ const el = wrap.querySelector(`[data-act="step-input"][data-id="${active}"]`); if(el) el.focus(); }
+}
+
+function todoToQuest(id){
+  const t = state.todos.find(x => x.id === id); if(!t) return;
+  if(state.today.quests.some(q => q.text.trim() && q.todoId === id)){ showToast('Already in today\'s quests'); return; }
+  const slot = findEmptySlotIndex();
+  if(slot === -1){ showToast('All 3 quest slots are full today'); return; }
+  const q = emptyQuest(slot === 0 ? 'main' : 'side');
+  q.id = genId('q'); q.text = t.text; q.createdDate = fmtDate(new Date()); q.todoId = t.id;
+  state.today.quests[slot] = q;
+  saveState(); renderQuests(); renderTodos(); renderMainQuestPrompt();
+  showToast('Added as ' + (slot === 0 ? 'Main Quest' : 'Quest ' + (slot + 1)));
+  maybePingAgenda();
+}
+function setTodoDone(id, done){
+  const t = state.todos.find(x => x.id === id); if(!t) return;
+  t.done = !!done; t.doneAt = done ? fmtDate(new Date()) : null;
+}
+function addStep(id, text){
+  const t = state.todos.find(x => x.id === id); const v = String(text || '').trim();
+  if(!t || !v) return;
+  (t.steps = t.steps || []).push({ id: genId('s'), text: v, done: false });
+  saveState(); renderTodos(); renderQuests();
+}
+
+function buildSortPrompt(){
+  const today = fmtDate(new Date());
+  const open = state.todos.filter(t => !t.done);
+  const lines = open.map(t => {
+    const steps = (t.steps || []).map(x => x.text).join('; ');
+    return `- ${t.text} | ${t.deadline || 'no deadline'}${steps ? ' | existing steps: ' + steps : ''}`;
+  }).join('\n');
+  return `I'm Serene, a financial consultant in Singapore. I have ADHD tendencies, so clear and small beats vague and big. Please sort my to-do list.
+
+Today is ${today}. My energy today: ${state.today.energy || 'not set'}.
+
+My to-dos (text | deadline):
+${lines}
+
+Please:
+1. Put every item under TODAY, THIS WEEK, LATER or DROP. TODAY has at most 3 items and must fit my energy today. DROP means safe to delete or hand to someone else.
+2. For anything bigger than about 30 minutes or vague, break it into 3 to 5 concrete steps. Each step starts with a verb and takes 15 minutes or less.
+3. Keep my wording for each item. Only suggest a deadline if one is clearly implied, written as YYYY-MM-DD.
+4. Reply with ONLY the list below in exactly this format, with no other text:
+
+TODAY
+- item text | deadline or blank | step one; step two; step three
+THIS WEEK
+- item text | deadline or blank | step one; step two
+LATER
+- item text | deadline or blank | step one
+DROP
+- item text | | short reason`;
+}
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch(e){
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try{ ok = document.execCommand('copy'); }catch(_){}
+    ta.remove(); return ok;
+  }
+}
+// Reads the chatbot's reply (TODAY / THIS WEEK / LATER / DROP sections of "- text | date | step; step").
+function applySortedAnswer(raw){
+  const today = fmtDate(new Date());
+  let bucket = null, touched = 0, created = 0;
+  String(raw || '').split(/\n/).forEach(line0 => {
+    const line = line0.trim().replace(/\*\*/g, '').replace(/^#+\s*/, '');
+    if(!line) return;
+    const head = line.replace(/[:：]\s*$/, '').toLowerCase();
+    if(head === 'today') { bucket = 'today'; return; }
+    if(head === 'this week' || head === 'week') { bucket = 'week'; return; }
+    if(head === 'later') { bucket = 'later'; return; }
+    if(head === 'drop' || head === 'maybe drop') { bucket = 'drop'; return; }
+    if(!bucket || !/^[-*•]|^\d+[.)]/.test(line)) return;
+    const parts = line.replace(/^[-*•]\s*|^\d+[.)]\s*/, '').split('|').map(x => x.trim());
+    const text = parts[0]; if(!text) return;
+    const dl = parts[1] ? (parseDateWord(parts[1]) || '') : '';
+    const extra = parts.slice(2).join(' | ');
+    let t = state.todos.find(x => !x.done && (tdNorm(x.text) === tdNorm(text) || (tdNorm(text).length >= 8 && (tdNorm(x.text).includes(tdNorm(text)) || tdNorm(text).includes(tdNorm(x.text))))));
+    if(!t){ t = newTodo(text, dl); state.todos.push(t); created++; }
+    t.bucket = bucket; t.bucketDate = today;
+    if(dl && !t.deadline) t.deadline = dl;
+    if(bucket === 'drop'){ t.note = extra ? 'Suggested drop: ' + extra : 'Suggested drop'; }
+    else if(extra && !(t.steps || []).length){
+      t.steps = extra.split(';').map(x => x.trim()).filter(Boolean).map(x => ({ id: genId('s'), text: x, done: false }));
+      if(t.steps.length) todoOpen.add(t.id);
+    }
+    touched++;
+  });
+  if(touched){ saveState(); renderTodos(); renderQuests(); }
+  return { touched, created };
+}
+
+function wireTodos(){
+  const msg = (id, text) => { const el = document.getElementById(id); if(el){ el.textContent = text; setTimeout(() => { if(el.textContent === text) el.textContent = ''; }, 4000); } };
+  const addNow = () => {
+    const ta = document.getElementById('todoDump');
+    const n = addTodosFromText(ta.value);
+    if(n){ ta.value = ''; msg('todoAddMsg', `Added ${n}`); } else msg('todoAddMsg', 'Type something first');
+  };
+  document.getElementById('todoAddBtn').addEventListener('click', addNow);
+  document.getElementById('todoDump').addEventListener('keydown', e => { if(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNow(); });
+  document.getElementById('todoSortToggle').addEventListener('click', () => {
+    const p = document.getElementById('todoSortPanel'); p.style.display = p.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('todoCopyBtn').addEventListener('click', async () => {
+    if(!state.todos.some(t => !t.done)){ showToast('Add some to-dos first'); return; }
+    showToast(await copyText(buildSortPrompt()) ? 'Copied. Paste it into a chatbot' : 'Could not copy');
+  });
+  document.getElementById('todoApplyBtn').addEventListener('click', () => {
+    const ta = document.getElementById('todoPaste');
+    const r = applySortedAnswer(ta.value);
+    if(r.touched){ ta.value = ''; msg('todoApplyMsg', `Sorted ${r.touched}${r.created ? ` (${r.created} new)` : ''}`); }
+    else msg('todoApplyMsg', "Couldn't read that. It needs TODAY / THIS WEEK / LATER / DROP headings with - items");
+  });
+  const list = document.getElementById('todoList');
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if(!b || b.tagName === 'INPUT') return;
+    const id = b.dataset.id, act = b.dataset.act;
+    if(act === 'quest') todoToQuest(id);
+    else if(act === 'open'){ todoOpen.has(id) ? todoOpen.delete(id) : todoOpen.add(id); renderTodos(); }
+    else if(act === 'del'){ state.todos = state.todos.filter(x => x.id !== id); saveState(); renderTodos(); renderQuests(); }
+    else if(act === 'step-del'){ const t = state.todos.find(x => x.id === id); if(t){ t.steps = t.steps.filter(x => x.id !== b.dataset.sid); saveState(); renderTodos(); renderQuests(); } }
+    else if(act === 'more'){ todoShowAll.has(b.dataset.g) ? todoShowAll.delete(b.dataset.g) : todoShowAll.add(b.dataset.g); renderTodos(); }
+    else if(act === 'clear-done'){ state.todos = state.todos.filter(x => !x.done); saveState(); renderTodos(); }
+  });
+  list.addEventListener('change', e => {
+    const el = e.target; const act = el.dataset && el.dataset.act; if(!act) return;
+    const t = state.todos.find(x => x.id === el.dataset.id); if(!t) return;
+    if(act === 'toggle'){ setTodoDone(t.id, el.checked); saveState(); renderTodos(); }
+    else if(act === 'step-toggle'){ const st = t.steps.find(x => x.id === el.dataset.sid); if(st){ st.done = el.checked; saveState(); renderTodos(); renderQuests(); } }
+    else if(act === 'date'){ t.deadline = el.value || ''; saveState(); renderTodos(); }
+  });
+  list.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && e.target.dataset && e.target.dataset.act === 'step-input'){ e.preventDefault(); addStep(e.target.dataset.id, e.target.value); }
+  });
+}
+
 /* ---------- Pipeline ---------- */
 // Records the date a case reached Closed (submitted) / Inforced so FYC
 // challenges can count only what landed inside their window. Moving a case
@@ -2354,14 +2700,14 @@ function wireExportImport(){
 
 /* ---------- Render all / wire all ---------- */
 function renderAll(){
-  renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderFycGoals(); renderUnfinished();
+  renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderFycGoals(); renderUnfinished(); renderTodos();
   renderQuests(); renderMainQuestPrompt(); renderDailies(); renderTimer(); renderStats();
   renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
   if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
 }
 function wireAllHandlers(){
-  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals();
+  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals(); wireTodos();
   wireTouchpointExercise(); wireSubmitDay(); wirePipeline(); wireExportImport();
 }
 </script>
