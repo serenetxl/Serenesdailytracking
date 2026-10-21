@@ -240,6 +240,10 @@ setTimeout(function(){
 }, 4000);
 </script>
 <script type="module">
+// Serene's day runs 3 am to 3 am (same as her panel), so dates here follow that too.
+function logicalNow(){ return new Date(Date.now() - 3 * 3600 * 1000); }
+function logicalToday(){ const d = logicalNow(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
 window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
@@ -389,7 +393,7 @@ async function approveProof(kind, dateStr, live){
   if(award && amount > 0){
     await addDoc(collection(db, "pointsLedger"), {
       ts: serverTimestamp(), type: 'earn', amount, reason: `${label} approved by Odin (${dateStr})`,
-      date: new Date().toISOString().slice(0,10), pingSent: false
+      date: logicalToday(), pingSent: false
     });
   }
 }
@@ -424,8 +428,7 @@ function renderFycGoals(){
   const wrap = document.getElementById('fycGoalsWrap');
   const goals = Array.isArray(state.fycGoals) ? state.fycGoals : [];
   if(!goals.length){ wrap.innerHTML = '<p class="sub">No challenges set.</p>'; return; }
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today = logicalToday();
   const cases = (state.pipeline && state.pipeline.cases) || [];
   wrap.innerHTML = goals.map(g => {
     const p = goalProgress(g, cases, today);
@@ -542,7 +545,7 @@ async function applyManualAdjustment(){
     await updateDoc(stateRef, { 'points.total': state.points.total + amount });
     await addDoc(collection(db, "pointsLedger"), {
       ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'penalty', amount, reason,
-      date: new Date().toISOString().slice(0,10), pingSent: false
+      date: logicalToday(), pingSent: false
     });
     document.getElementById('adjAmount').value = '';
     document.getElementById('adjReason').value = '';
@@ -661,7 +664,7 @@ async function applyStreakAdjustment(){
     await updateDoc(stateRef, { 'points.streakDays': newStreakDays, 'points.multiplier': newMultiplier });
     await addDoc(collection(db, "pointsLedger"), {
       ts: serverTimestamp(), type: amount > 0 ? 'earn' : 'streak_break', amount: 0, reason: `${reason} (streak ${amount > 0 ? '+' : ''}${amount}d)`,
-      date: new Date().toISOString().slice(0,10), pingSent: false
+      date: logicalToday(), pingSent: false
     });
     document.getElementById('streakAdjAmount').value = '';
     document.getElementById('streakAdjReason').value = '';

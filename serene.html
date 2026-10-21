@@ -515,7 +515,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 21 Oct</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 21 Oct (3am day)</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -870,7 +870,7 @@ const DAILY_TEMPLATE_OLD = [
 // Same slot, same count, so ticks and history aren't disturbed; earlier days keep the old wording.
 const NEWS_ITEM = 'Catch up on news (global / finance / business)';
 function dailyTemplate(dateStr){
-  const d = dateStr || fmtDate(new Date());
+  const d = dateStr || logicalToday();
   if(d < '2026-10-09') return DAILY_TEMPLATE_OLD;
   return DAILY_TEMPLATE_OLD.map(x => x === '15-minute skill practice' ? NEWS_ITEM : x);
 }
@@ -929,6 +929,10 @@ function defaultTimer(){
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function fmtDate(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+// The "day" runs 3 am to 3 am, so late-night use after midnight still counts as the same day.
+const DAY_START_HOUR = 3;
+function logicalNow(){ return new Date(Date.now() - DAY_START_HOUR * 3600 * 1000); }
+function logicalToday(){ return fmtDate(logicalNow()); }
 function parseDate(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function mondayOf(d){
   const date = new Date(d);
@@ -938,7 +942,7 @@ function mondayOf(d){
   return fmtDate(date);
 }
 function weeksLeftToDeadline(fromMondayStr){
-  const monday = parseDate(fromMondayStr || mondayOf(new Date()));
+  const monday = parseDate(fromMondayStr || mondayOf(logicalNow()));
   const msLeft = GOAL_DEADLINE - monday;
   const weeks = Math.ceil(msLeft / (7 * 24 * 60 * 60 * 1000));
   return Math.max(1, weeks);
@@ -967,12 +971,12 @@ function defaultToday(dateStr){
 }
 
 function defaultState(){
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   return {
     version: 2,
     goal: { currentFYCC: 0, targetFYCC: 50000 },
     weeklyTargets: defaultTargets(),
-    currentWeek: { weekStart: mondayOf(new Date()), stats: emptyStats() },
+    currentWeek: { weekStart: mondayOf(logicalNow()), stats: emptyStats() },
     weekHistory: [],
     today: defaultToday(today),
     dayHistory: [],
@@ -995,8 +999,8 @@ function normalizeQuest(q, index){
   return {
     id: hasText ? genId('q') : null, text: q.text || '', role,
     status: q.done ? 'completed' : 'not_started',
-    createdDate: hasText ? fmtDate(new Date()) : null, carriedDates: [],
-    completedDate: q.done && hasText ? fmtDate(new Date()) : null,
+    createdDate: hasText ? logicalToday() : null, carriedDates: [],
+    completedDate: q.done && hasText ? logicalToday() : null,
     startedAt: null, reasonCode: null, reasonNote: null, rescheduledTo: null
   };
 }
@@ -1040,7 +1044,7 @@ function mergeRewardItems(defaults, existing){
 function mergeWithDefaults(parsed){
   const base = defaultState();
   if(!parsed) return base;
-  const baseToday = defaultToday(fmtDate(new Date()));
+  const baseToday = defaultToday(logicalToday());
   const mergedToday = {
     ...baseToday, ...(parsed.today||{}),
     timer: { ...baseToday.timer, ...(((parsed.today||{}).timer)||{}) },
@@ -1065,14 +1069,14 @@ function mergeWithDefaults(parsed){
     todos: Array.isArray(parsed.todos) ? parsed.todos : [],
     // Weekly points only apply to weeks from this Monday on (no retroactive payout).
     scheduledQuests: Array.isArray(parsed.scheduledQuests) ? parsed.scheduledQuests : [],
-    weeklyPayFrom: parsed.weeklyPayFrom || mondayOf(new Date()),
+    weeklyPayFrom: parsed.weeklyPayFrom || mondayOf(logicalNow()),
     pendingCarryover: (parsed.pendingCarryover || []).map((q,i) => normalizeQuest(q,i)),
     questLog: parsed.questLog || [],
     points: { ...base.points, ...(parsed.points||{}) },
     rewardItems: refreshConditionalRewards(
       mergeRewardItems(base.rewardItems, parsed.rewardItems),
       reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
-      new Date()
+      logicalNow()
     ),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
@@ -1123,7 +1127,7 @@ function applyWeeklyPoints(){
   if(!r.events.length) return false;
   state.weekHistory = r.weekHistory; state.points = r.points;
   for(const ev of r.events){
-    addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: fmtDate(new Date()), pingSent: false }).catch(()=>{});
+    addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: logicalToday(), pingSent: false }).catch(()=>{});
     pingOdin(`⭐ ${ev.reason}: +${ev.amount} pts. Balance now ${r.points.total}.`);
   }
   saveState();
@@ -1132,7 +1136,7 @@ function applyWeeklyPoints(){
 // Brings rescheduled quests back on their new date (or later, if the app wasn't
 // opened that day) into the Unfinished card, ready to Continue into a slot.
 function releaseScheduledQuests(){
-  const todayStr = fmtDate(new Date());
+  const todayStr = logicalToday();
   const list = state.scheduledQuests || [];
   const due = list.filter(q => q.rescheduledTo && q.rescheduledTo <= todayStr);
   if(!due.length) return;
@@ -1163,13 +1167,13 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 async function checkDailyReset(){
-  const todayStr = fmtDate(new Date());
+  const todayStr = logicalToday();
   if(state.today.date !== todayStr) await adoptRemoteIfNewer(); // don't settle from a stale copy
   // A quest can't be "in progress" from an earlier day: if one still carries
   // yesterday's start time (e.g. it was carried over), reset it to Not Started.
   let fixedStale = false;
   state.today.quests.forEach(q => {
-    if(q.status === 'in_progress' && q.startedAt && fmtDate(new Date(q.startedAt)) !== state.today.date && state.today.date === todayStr){
+    if(q.status === 'in_progress' && q.startedAt && fmtDate(new Date(new Date(q.startedAt).getTime() - DAY_START_HOUR*3600*1000)) !== state.today.date && state.today.date === todayStr){
       q.status = 'not_started'; q.startedAt = null; fixedStale = true;
     }
   });
@@ -1223,9 +1227,9 @@ async function checkDailyReset(){
       unresolved.forEach(q => { if(!existingIds.has(q.id)) state.pendingCarryover.push(q); });
     }
 
-    state.rewardItems = refreshRewardItems(state.rewardItems, new Date());
+    state.rewardItems = refreshRewardItems(state.rewardItems, logicalNow());
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, logicalNow());
     applyWeeklyPoints();
     state.today = defaultToday(todayStr);
     releaseScheduledQuests();
@@ -1238,7 +1242,7 @@ function addDaysLocal(dateStr, n){
 }
 
 function checkWeeklyReset(){
-  const thisMonday = mondayOf(new Date());
+  const thisMonday = mondayOf(logicalNow());
   if(state.currentWeek.weekStart !== thisMonday){
     const w = state.currentWeek;
     // Every week is archived, even an empty one — a missing/blank week must
@@ -1254,7 +1258,7 @@ function checkWeeklyReset(){
       });
     }
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, new Date());
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, logicalNow());
     applyWeeklyPoints();
     sendWeeklyRecap(w.weekStart);
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
@@ -1373,7 +1377,7 @@ function wireTabs(){
 
 /* ---------- Header label ---------- */
 function renderHeader(){
-  const d = new Date();
+  const d = logicalNow();
   const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
   document.getElementById('todayLabel').textContent = d.toLocaleDateString('en-SG', opts);
 }
@@ -1425,7 +1429,7 @@ function wireGoal(){
 function isMainLocked(){ return state.today.timer.status === 'done'; }
 
 function logQuestEvent(q, status, extra){
-  state.questLog.push({ id: q.id, text: q.text, role: q.role, createdDate: q.createdDate, resolvedDate: fmtDate(new Date()), status, ...extra });
+  state.questLog.push({ id: q.id, text: q.text, role: q.role, createdDate: q.createdDate, resolvedDate: logicalToday(), status, ...extra });
 }
 
 function startQuest(i){
@@ -1437,7 +1441,7 @@ function startQuest(i){
 function completeQuest(i){
   const q = state.today.quests[i];
   if(!q.text.trim() || q.status === 'completed') return;
-  q.status = 'completed'; q.completedDate = fmtDate(new Date());
+  q.status = 'completed'; q.completedDate = logicalToday();
   if(!q.id) q.id = genId('q');
   logQuestEvent(q, 'completed');
   if(q.todoId) setTodoDone(q.todoId, true); // finishing the quest ticks the linked to-do
@@ -1449,7 +1453,7 @@ function completeQuest(i){
 function moveQuestToUnfinished(i, action){
   const q = state.today.quests[i];
   if(!q.text.trim() || q.status === 'completed') return;
-  if(!q.id){ q.id = genId('q'); q.createdDate = fmtDate(new Date()); }
+  if(!q.id){ q.id = genId('q'); q.createdDate = logicalToday(); }
   q.status = 'not_started';
   if(!q.carriedDates) q.carriedDates = [];
   state.pendingCarryover.push(q);
@@ -1463,7 +1467,7 @@ function undoCompleteQuest(i){
   if(q.status !== 'completed') return;
   q.status = q.startedAt ? 'in_progress' : 'not_started';
   q.completedDate = null;
-  const todayStr = fmtDate(new Date());
+  const todayStr = logicalToday();
   const logIdx = state.questLog.findIndex(e => e.id === q.id && e.status === 'completed' && e.resolvedDate === todayStr);
   if(logIdx !== -1) state.questLog.splice(logIdx, 1);
   if(q.todoId) setTodoDone(q.todoId, false);
@@ -1516,7 +1520,7 @@ function renderQuests(){
     input.placeholder = i === 0 ? "Today's most important outcome…" : 'Another must-do for today…';
     input.value = q.text; input.disabled = locked;
     input.addEventListener('input', () => {
-      if(!q.id && input.value.trim()){ q.id = genId('q'); q.createdDate = fmtDate(new Date()); }
+      if(!q.id && input.value.trim()){ q.id = genId('q'); q.createdDate = logicalToday(); }
       q.text = input.value;
       saveState();
       if(i === 0 && input.value.trim()) dismissTimerBanner();
@@ -1565,7 +1569,7 @@ function renderQuests(){
         const started = document.createElement('span');
         started.className = 'quest-started-at';
         const sd = new Date(q.startedAt);
-        const sameDay = fmtDate(sd) === state.today.date;
+        const sameDay = fmtDate(new Date(sd.getTime() - DAY_START_HOUR*3600*1000)) === state.today.date;
         started.textContent = 'Started ' + (sameDay ? '' : sd.toLocaleDateString('en-SG', {day:'numeric', month:'short'}) + ' ') + sd.toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit'});
         meta.appendChild(started);
       }
@@ -1578,7 +1582,7 @@ function renderQuests(){
       }
       // Steps: a linked to-do keeps its steps on the to-do (so both stay in sync);
       // a quest typed straight into the agenda keeps its own steps on the quest.
-      if(!q.id){ q.id = genId('q'); q.createdDate = q.createdDate || fmtDate(new Date()); }
+      if(!q.id){ q.id = genId('q'); q.createdDate = q.createdDate || logicalToday(); }
       const linked = q.todoId ? (state.todos || []).find(x => x.id === q.todoId) : null;
       const stepList = linked ? (linked.steps = linked.steps || []) : (q.steps = q.steps || []);
       const stepsOpen = questStepsOpen.has(q.id);
@@ -1646,7 +1650,7 @@ function renderMainQuestPrompt(){
 
 /* ---------- Unfinished From Yesterday ---------- */
 let reasonPanelOpenFor = null;
-function tomorrowStr(){ const d = new Date(); d.setDate(d.getDate() + 1); return fmtDate(d); }
+function tomorrowStr(){ const d = logicalNow(); d.setDate(d.getDate() + 1); return fmtDate(d); }
 function findEmptySlotIndex(){
   for(const i of [1, 2, 0]){ if(!state.today.quests[i].text.trim()) return i; }
   return -1;
@@ -1657,7 +1661,7 @@ function continueQuest(id){
   const slot = findEmptySlotIndex();
   if(slot === -1){ showToast('All 3 quest slots are full today'); return; }
   const q = state.pendingCarryover[idx];
-  q.carriedDates.push(fmtDate(new Date()));
+  q.carriedDates.push(logicalToday());
   // A new day is a fresh start: yesterday's 'In Progress' + start time don't carry over.
   q.status = 'not_started'; q.startedAt = null;
   state.today.quests[slot] = q;
@@ -1675,7 +1679,7 @@ function markCarryoverDone(id){
   const q = state.pendingCarryover[idx];
   const ok = confirm(`Mark "${q.text}" as done?\n\nYesterday's points and streak are already settled, so this won't change them — Odin will be told so he can adjust if he agrees.`);
   if(!ok) return;
-  q.status = 'completed'; q.completedDate = fmtDate(new Date());
+  q.status = 'completed'; q.completedDate = logicalToday();
   logQuestEvent(q, 'completed', { late: true });
   state.pendingCarryover.splice(idx, 1);
   saveState(); renderUnfinished();
@@ -2129,7 +2133,7 @@ async function doRedeem(rewardId){
   if(!result.ok){ showToast(result.error); return; }
   state.points = result.points; state.rewardItems = result.rewardItems;
   saveState(); renderPointsBadge(); renderRewards();
-  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...result.event, date: fmtDate(new Date()), pingSent: false });
+  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...result.event, date: logicalToday(), pingSent: false });
   pingOdin(`💳 Serene redeemed <b>${result.event.reason.replace('Redeemed: ', '')}</b> (−${Math.abs(result.event.amount)} pts). Balance now ${result.points.total}.`);
   showToast('Redeemed');
 }
@@ -2198,7 +2202,7 @@ function renderFycGoals(){
   const wrap = document.getElementById('fycGoalsList');
   const goals = state.fycGoals || [];
   if(!goals.length){ wrap.innerHTML = '<div class="empty-note">No challenges yet — tap + Add.</div>'; return; }
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   let needSave = false;
   wrap.innerHTML = goals.map(g => {
     const p = goalProgress(g, state.pipeline.cases, today);
@@ -2250,7 +2254,7 @@ function wireFycGoals(){
   const form = document.getElementById('fycGoalForm');
   document.getElementById('fycGoalAddToggle').addEventListener('click', () => {
     form.style.display = form.style.display === 'none' ? '' : 'none';
-    if(form.style.display !== 'none' && !document.getElementById('fgStart').value) document.getElementById('fgStart').value = fmtDate(new Date());
+    if(form.style.display !== 'none' && !document.getElementById('fgStart').value) document.getElementById('fgStart').value = logicalToday();
   });
   document.getElementById('fgSaveBtn').addEventListener('click', () => {
     const err = document.getElementById('fgErr'); err.textContent = '';
@@ -2261,7 +2265,7 @@ function wireFycGoals(){
     const start = document.getElementById('fgStart').value, end = document.getElementById('fgEnd').value;
     if(end && start && end < start){ err.textContent = 'End date is before the start date.'; return; }
     state.fycGoals.push({
-      id: genId('g'), name, tiers: parsed.tiers, startDate: start || fmtDate(new Date()), endDate: end || '',
+      id: genId('g'), name, tiers: parsed.tiers, startDate: start || logicalToday(), endDate: end || '',
       basis: document.getElementById('fgBasis').value, carried: Math.max(0, Number(document.getElementById('fgCarried').value) || 0), pinged: []
     });
     ['fgName','fgTiers','fgEnd','fgCarried'].forEach(id => document.getElementById(id).value = '');
@@ -2282,7 +2286,7 @@ function tdMk(y, m, d){ const dt = new Date(y, m, d); return (dt.getMonth() === 
 // Understands: today, tomorrow/tmr, mon..sun (next one, today counts), 25 oct, oct 25, 25/10, 25/10/26, 2026-10-25.
 function parseDateWord(raw){
   const s = String(raw || '').trim().toLowerCase().replace(/[.,]$/, '');
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   const yr = new Date().getFullYear();
   if(!s) return null;
   if(s === 'today') return today;
@@ -2308,7 +2312,7 @@ function parseDateWord(raw){
   }
   const di = TD_DAYS.indexOf(s.slice(0, 3));
   if(di >= 0 && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*$/.test(s)){
-    const now = new Date(); const diff = (di - now.getDay() + 7) % 7;
+    const now = logicalNow(); const diff = (di - now.getDay() + 7) % 7;
     return tdAddDays(today, diff);
   }
   return null;
@@ -2324,7 +2328,7 @@ function parseTodoLine(line){
 }
 function tdNorm(x){ return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
 function newTodo(text, deadline){
-  return { id: genId('t'), text, deadline: deadline || '', done: false, doneAt: null, bucket: null, bucketDate: null, note: '', steps: [], createdAt: fmtDate(new Date()) };
+  return { id: genId('t'), text, deadline: deadline || '', done: false, doneAt: null, bucket: null, bucketDate: null, note: '', steps: [], createdAt: logicalToday() };
 }
 
 // Imports tasks from markdown tables like the ones chatbots produce:
@@ -2357,7 +2361,7 @@ function importMarkdownTables(raw){
     const text = body.filter(Boolean).join(': ');
     if(!text) return;
     if((state.todos || []).some(t => tdNorm(t.text) === tdNorm(text))) return;
-    const t = newTodo(text, deadline); if(done){ t.done = true; t.doneAt = fmtDate(new Date()); }
+    const t = newTodo(text, deadline); if(done){ t.done = true; t.doneAt = logicalToday(); }
     state.todos.push(t); n++;
   });
   return n;
@@ -2402,7 +2406,7 @@ const TD_GROUPS = [
 function renderTodos(){
   const wrap = document.getElementById('todoList');
   if(!wrap) return;
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   const todos = state.todos || [];
   if(!todos.length){ wrap.innerHTML = '<div class="empty-note">Nothing here yet. Dump whatever is on your mind above.</div>'; return; }
   const inQuests = new Set(state.today.quests.filter(q => q.text.trim() && q.todoId).map(q => q.todoId));
@@ -2451,7 +2455,7 @@ function todoToQuest(id){
   const slot = findEmptySlotIndex();
   if(slot === -1){ showToast('All 3 quest slots are full today'); return; }
   const q = emptyQuest(slot === 0 ? 'main' : 'side');
-  q.id = genId('q'); q.text = t.text; q.createdDate = fmtDate(new Date()); q.todoId = t.id;
+  q.id = genId('q'); q.text = t.text; q.createdDate = logicalToday(); q.todoId = t.id;
   state.today.quests[slot] = q;
   saveState(); renderQuests(); renderTodos(); renderMainQuestPrompt();
   showToast('Added as ' + (slot === 0 ? 'Main Quest' : 'Quest ' + (slot + 1)));
@@ -2459,7 +2463,7 @@ function todoToQuest(id){
 }
 function setTodoDone(id, done){
   const t = state.todos.find(x => x.id === id); if(!t) return;
-  t.done = !!done; t.doneAt = done ? fmtDate(new Date()) : null;
+  t.done = !!done; t.doneAt = done ? logicalToday() : null;
 }
 function addStep(id, text){
   const t = state.todos.find(x => x.id === id); const v = String(text || '').trim();
@@ -2469,7 +2473,7 @@ function addStep(id, text){
 }
 
 function buildSortPrompt(){
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   const open = state.todos.filter(t => !t.done);
   const lines = open.map(t => {
     const steps = (t.steps || []).map(x => x.text).join('; ');
@@ -2509,7 +2513,7 @@ async function copyText(text){
 // Reads the chatbot's reply (TODAY / THIS WEEK / LATER / DROP sections of "- text | date | step; step").
 function applySortedAnswer(raw){
   if(/^\s*\|/m.test(raw)){ const t = importMarkdownTables(raw); if(t){ saveState(); renderTodos(); return { touched: t, created: t }; } }
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   let bucket = null, touched = 0, created = 0;
   String(raw || '').split(/\n/).forEach(line0 => {
     const line = line0.trim().replace(/\*\*/g, '').replace(/^#+\s*/, '');
@@ -2590,7 +2594,7 @@ function wireTodos(){
 // back out of a stage clears that stage's date. Cases that were already
 // closed before this existed have no date — use "already clocked" for those.
 function stampCaseDates(c){
-  const today = fmtDate(new Date());
+  const today = logicalToday();
   if(c.stage === 'closed' || c.stage === 'inforced'){ if(!c.closedAt) c.closedAt = today; } else { delete c.closedAt; }
   if(c.stage === 'inforced'){ if(!c.inforcedAt) c.inforcedAt = today; } else { delete c.inforcedAt; }
 }
@@ -2701,7 +2705,7 @@ function wirePipeline(){
     const fyc = Math.max(0, Number(document.getElementById('caseFycInput').value) || 0);
     const stage = document.getElementById('caseStageInput').value;
     if(!client && !caseName){ showToast('Add a client or case name first'); return; }
-    const newCase = { id: genCaseId(), client, caseName, fyc, stage, inforcedCounted: false, revisit: false, createdAt: fmtDate(new Date()) };
+    const newCase = { id: genCaseId(), client, caseName, fyc, stage, inforcedCounted: false, revisit: false, createdAt: logicalToday() };
     stampCaseDates(newCase);
     state.pipeline.cases.unshift(newCase);
     saveState();
@@ -2717,7 +2721,7 @@ function wirePipeline(){
 
 /* ---------- History ---------- */
 function questLogThisWeek(){
-  const monday = parseDate(mondayOf(new Date()));
+  const monday = parseDate(mondayOf(logicalNow()));
   const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
   return state.questLog.filter(e => { const d = parseDate(e.resolvedDate); return d >= monday && d <= sunday; });
 }
@@ -2796,7 +2800,7 @@ function wireExportImport(){
   document.getElementById('exportBtn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `serene-lcp-backup-${fmtDate(new Date())}.json`;
+    const a = document.createElement('a'); a.href = url; a.download = `serene-lcp-backup-${logicalToday()}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     showToast('Data exported');
   });
