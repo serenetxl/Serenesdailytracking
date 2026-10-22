@@ -867,7 +867,7 @@
       <details class="ct-details" id="ctImportBox">
         <summary>Import from Excel / export my list</summary>
         <div style="margin-top:8px;line-height:1.55">
-          Columns: <b>Name</b>, IGN / Nickname, How I know them, Type (Prospect or Client), Class (A-D), Important details, Last messaged, Birthday (day and month, e.g. 14 Mar). Only Name is needed. Blank Type or Class use the two dropdowns above.
+          Columns: <b>Name</b>, IGN / Nickname, How I know them, Type (Prospect or Client), Class (A-D), Important details, Last messaged, Birthday (e.g. 14 Mar 1990, year optional). Only Name is needed. Blank Type or Class use the two dropdowns above.
           <div class="td-row">
             <button class="quest-action-btn" id="ctTemplateBtn">Download template</button>
             <label class="quest-action-btn" for="ctFile" style="cursor:pointer">Choose Excel / CSV file</label>
@@ -3045,19 +3045,38 @@ function ctMatches(c, q){
 /* ----- Birthdays (stored as "MM-DD", year not kept) ----- */
 const CT_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function ctBdayValid(m, d){ const dim = [31,29,31,30,31,30,31,31,30,31,30,31]; return m >= 1 && m <= 12 && d >= 1 && d <= dim[m - 1]; }
-function ctParseBday(v){
+// Returns { md: "MM-DD", year: number|null }. A year is kept only if it looks like a real birth year
+// (Excel fills in the current year when you type just "14 Mar", so the current year is ignored).
+function ctParseBdayFull(v){
   if(v == null || v === '') return null;
-  if(v instanceof Date && !isNaN(v)){ const u = new Date(v.getTime() + 12 * 3600e3); return `${pad(u.getMonth() + 1)}-${pad(u.getDate())}`; }
+  const nowY = +logicalToday().slice(0, 4);
+  const yr = y => (y >= 1900 && y < nowY) ? y : null;
+  if(v instanceof Date && !isNaN(v)){ const u = new Date(v.getTime() + 12 * 3600e3); return { md: `${pad(u.getMonth() + 1)}-${pad(u.getDate())}`, year: yr(u.getFullYear()) }; }
   const s = String(v).trim(); if(!s) return null;
-  let m, mo, d;
-  if((m = s.match(/^\d{4}-(\d{1,2})-(\d{1,2})/))){ mo = +m[1]; d = +m[2]; }
-  else if((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.]\d{2,4})?$/))){ d = +m[1]; mo = +m[2]; }   // day first
-  else if((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s*([A-Za-z]{3,})/))){ d = +m[1]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase()) + 1; }
-  else if((m = s.match(/^([A-Za-z]{3,})\s*(\d{1,2})/))){ d = +m[2]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[1].slice(0, 3).toLowerCase()) + 1; }
+  let m, mo, d, y = null;
+  const fy = t => { if(!t) return null; let n = +t; if(t.length === 2) n += (n <= nowY % 100 ? 2000 : 1900); return n; };
+  if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))){ y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else if((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/))){ d = +m[1]; mo = +m[2]; y = fy(m[3]); }   // day first
+  else if((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s*([A-Za-z]{3,})\.?,?\s*(\d{4})?/))){ d = +m[1]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
+  else if((m = s.match(/^([A-Za-z]{3,})\.?\s*(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/))){ d = +m[2]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[1].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
   else return null;
-  return ctBdayValid(mo, d) ? `${pad(mo)}-${pad(d)}` : null;
+  return ctBdayValid(mo, d) ? { md: `${pad(mo)}-${pad(d)}`, year: yr(y) } : null;
 }
+function ctParseBday(v){ const r = ctParseBdayFull(v); return r ? r.md : null; }
 function ctBdayLabel(md){ return md ? `${+md.slice(3)} ${CT_MON[+md.slice(0, 2) - 1]}` : ''; }
+function ctBdayFullLabel(c){ return c.birthday ? ctBdayLabel(c.birthday) + (c.birthYear ? ' ' + c.birthYear : '') : ''; }
+// Age they turn on their next birthday (today counts), or null when the year isn't known.
+function ctTurning(c, today){
+  if(!c.birthday || !c.birthYear) return null;
+  const away = ctBdayDaysAway(c.birthday, today);
+  const occ = new Date(parseDate(today).getTime() + away * 86400000 + 12 * 3600e3);
+  const n = occ.getFullYear() - c.birthYear;
+  return n > 0 && n < 120 ? n : null;
+}
+function ctAgeNow(c, today){
+  const t = ctTurning(c, today); if(t == null) return null;
+  return ctBdayDaysAway(c.birthday, today) === 0 ? t : t - 1;
+}
 // Days from `today` (YYYY-MM-DD) to the next occurrence of the birthday. Feb 29 counts as Feb 28 in non-leap years.
 function ctBdayDaysAway(md, today){
   const isLeap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
@@ -3086,7 +3105,7 @@ function renderContacts(){
     h += `<div class="ct-top">${ctSelectMode && mode === 'all' ? `<input type="checkbox" class="ct-check" data-sel="${c.id}" ${ctSelected.has(c.id) ? 'checked' : ''}>` : ''}<span class="ct-name">${escHtml(c.name)}</span><span class="ct-class ${c.cls}">${ctKindLabel(c.kind)} ${c.cls}</span></div>`;
     if(sub) h += `<div class="ct-sub">${sub}</div>`;
     if(c.note) h += `<div class="ct-details-text ${mode === 'due' ? '' : 'clamp'}">${escHtml(c.note)}</div>`;
-    h += `<div class="wr-meta"><span class="td-chip ${lab.cls}">${lab.text}</span>${c.birthday ? `<span class="td-chip">🎂 ${ctBdayLabel(c.birthday)}</span>` : ''}
+    h += `<div class="wr-meta"><span class="td-chip ${lab.cls}">${lab.text}</span>${c.birthday ? `<span class="td-chip">🎂 ${ctBdayLabel(c.birthday)}${ctAgeNow(c, today) != null ? ' · age ' + ctAgeNow(c, today) : ''}</span>` : ''}
         <span class="wr-sent">${c.lastContact ? 'last ' + parseDate(c.lastContact).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : 'not messaged yet'} · every ${ctFreqDays(c)}d</span>
         <button class="quest-action-btn done-btn" data-ct="msg" data-id="${c.id}">✓ Messaged</button>`;
     if(mode === 'due'){
@@ -3104,7 +3123,7 @@ function renderContacts(){
         <label class="ct-lab">How I know them<input class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
         <label class="ct-lab">Type<select class="td-input" data-f="kind"><option value="prospect" ${c.kind === 'prospect' ? 'selected' : ''}>Prospect</option><option value="client" ${c.kind === 'client' ? 'selected' : ''}>Client</option></select></label>
         <label class="ct-lab">Class<select class="td-input" data-f="cls">${CT_CLASSES.map(x => `<option ${c.cls === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-        <label class="full ct-lab">Birthday (day and month)<input class="td-input" data-f="birthday" value="${escHtml(c.birthday ? ctBdayLabel(c.birthday) : '')}" placeholder="e.g. 14 Mar" style="max-width:180px"></label>
+        <label class="full ct-lab">Birthday (year optional)<input class="td-input" data-f="birthday" value="${escHtml(ctBdayFullLabel(c))}" placeholder="e.g. 14 Mar 1990 (year optional)" style="max-width:180px"></label>
         <label class="full ct-lab">Important details<textarea class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
         <label class="full ct-lab">Next message due <input class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
         <div class="full wr-meta"><button class="quest-action-btn done-btn" data-ct="save" data-id="${c.id}">Save</button><button class="quest-action-btn" data-ct="del" data-id="${c.id}">Delete</button></div>
@@ -3119,10 +3138,12 @@ function renderContacts(){
     const year = +today.slice(0, 4);
     const bd = all.filter(c => c.birthday).map(c => ({ c, away: ctBdayDaysAway(c.birthday, today) })).filter(x => x.away <= 7).sort((a, b) => a.away - b.away);
     bwrap.innerHTML = bd.length ? `<div class="ct-group" style="margin-top:4px">🎂 Birthdays</div>` + bd.map(({ c, away }) => {
-      const when = away === 0 ? 'today' : away === 1 ? 'tomorrow' : `in ${away} days (${ctBdayLabel(c.birthday)})`;
+      const turning = ctTurning(c, today);
+      const when = (away === 0 ? 'today' : away === 1 ? 'tomorrow' : `in ${away} days (${ctBdayLabel(c.birthday)})`) + (turning ? ` · ${away === 0 ? 'turns' : 'turning'} ${turning}` : '');
+      const anb = (c.kind === 'client' && turning) ? `<div class="ct-sub">Insurance age (age next birthday) goes ${turning} → ${turning + 1} on ${ctBdayLabel(c.birthday)}. Check premium or review timing.</div>` : '';
       const wished = c.bdayWished === year && away === 0;
       return `<div class="ct-item"><div class="ct-top"><span class="ct-name">${escHtml(c.name)}</span><span class="ct-class ${c.cls}">${ctKindLabel(c.kind)} ${c.cls}</span><span class="td-chip ${away === 0 ? 'today' : ''}">${when}</span></div>
-        ${c.note ? `<div class="ct-details-text clamp">${escHtml(c.note)}</div>` : ''}
+        ${anb}${c.note ? `<div class="ct-details-text clamp">${escHtml(c.note)}</div>` : ''}
         ${away === 0 ? `<div class="wr-meta">${wished ? '<span class="td-chip">✓ wished</span>' : `<button class="quest-action-btn done-btn" data-ct="wish" data-id="${c.id}">✓ Wished</button>`}</div>` : ''}</div>`;
     }).join('') : '';
   }
@@ -3237,7 +3258,7 @@ function ctRowsToPeople(rows, defKind, defCls){
     if(/^[ABCD]/.test(cv)) cls = cv[0];
     const kv = String(g('kind')).toLowerCase();
     const kind = kv ? (kv.includes('client') ? 'client' : 'prospect') : defKind;
-    people.push({ name, aka: String(g('aka')).trim(), knownFrom: String(g('knownFrom')).trim(), kind, cls, note: String(g('note')).trim(), last: ctToDate(g('last')), bday: ctParseBday(g('bday')) });
+    people.push({ name, aka: String(g('aka')).trim(), knownFrom: String(g('knownFrom')).trim(), kind, cls, note: String(g('note')).trim(), last: ctToDate(g('last')), bday: (ctParseBdayFull(g('bday')) || {}).md || '', bdayYear: (ctParseBdayFull(g('bday')) || {}).year || null });
   });
   return { people, blank };
 }
@@ -3259,7 +3280,7 @@ function ctDoImport(){
   if(!ctPending || !ctPending.length) return;
   const today = logicalToday(); let spread = 0;
   ctPending.forEach(p => {
-    const c = { id: genId('c'), name: p.name, aka: p.aka, knownFrom: p.knownFrom, kind: p.kind, cls: p.cls, note: p.note, birthday: p.bday || '', lastContact: p.last || null, nextDue: today, msgCount: 0, createdAt: today };
+    const c = { id: genId('c'), name: p.name, aka: p.aka, knownFrom: p.knownFrom, kind: p.kind, cls: p.cls, note: p.note, birthday: p.bday || '', birthYear: p.bdayYear || null, lastContact: p.last || null, nextDue: today, msgCount: 0, createdAt: today };
     if(p.last) c.nextDue = tdAddDays(p.last, ctFreqDays(c));
     else c.nextDue = tdAddDays(today, spread++ % ctFreqDays(c));   // spread new names over their first cycle
     cdata.contacts.push(c);
@@ -3349,7 +3370,7 @@ function wireContacts(){
       c.name = nm; c.aka = val('aka').trim(); c.knownFrom = val('knownFrom').trim(); c.kind = val('kind'); c.cls = val('cls'); c.note = val('note').trim();
       if(val('nextDue')) c.nextDue = val('nextDue');
       const bv = val('birthday').trim();
-      if(bv){ const bm = ctParseBday(bv); if(!bm){ showToast('Birthday not understood. Try 14 Mar'); return; } c.birthday = bm; } else c.birthday = '';
+      if(bv){ const bm = ctParseBdayFull(bv); if(!bm){ showToast('Birthday not understood. Try 14 Mar 1990'); return; } c.birthday = bm.md; c.birthYear = bm.year || null; } else { c.birthday = ''; c.birthYear = null; }
       ctEditOpen.delete(c.id);
     }
     if(saveContacts()){ renderContacts(); renderWaiting(); }
@@ -3391,13 +3412,13 @@ function wireContacts(){
   // Import / export
   document.getElementById('ctTemplateBtn').addEventListener('click', () => {
     const ex = [
-      ['Diana Tan', 'dianat', 'Ex-colleague at ABC', 'Client', 'A', 'Has 2 kids. Refers her friends. Loves hiking.', '', '14 Mar'],
+      ['Diana Tan', 'dianat', 'Ex-colleague at ABC', 'Client', 'A', 'Has 2 kids. Refers her friends. Loves hiking.', '', '14 Mar 1988'],
       ['Kevin Lim', 'KevLim88', 'Guild member', 'Prospect', 'B', 'Just started a new job in IT', '2026-10-15', '3 Nov']
     ];
     ctDownload('contacts-template.csv', [CT_COLS, ...ex].map(r => r.map(ctCsvCell).join(',')).join('\r\n'));
   });
   document.getElementById('ctExportBtn').addEventListener('click', () => {
-    const rows = cdata.contacts.map(c => [c.name, c.aka || '', c.knownFrom || '', ctKindLabel(c.kind), c.cls, c.note || '', c.lastContact || '', c.birthday ? ctBdayLabel(c.birthday) : '']);
+    const rows = cdata.contacts.map(c => [c.name, c.aka || '', c.knownFrom || '', ctKindLabel(c.kind), c.cls, c.note || '', c.lastContact || '', ctBdayFullLabel(c)]);
     ctDownload('my-contacts.csv', [CT_COLS, ...rows].map(r => r.map(ctCsvCell).join(',')).join('\r\n'));
   });
   document.getElementById('ctFile').addEventListener('change', e => { const f = e.target.files[0]; if(f) ctReadFile(f); e.target.value = ''; });

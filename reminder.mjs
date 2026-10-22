@@ -53,6 +53,13 @@ export function bdayOn(md, dateStr) {
 }
 function addDay(dateStr, n = 1) { return new Date(Date.parse(dateStr) + n * 86400e3).toISOString().slice(0, 10); }
 const label = c => `${esc(c.name)} (${c.kind === "client" ? "Client" : "Prospect"} ${esc(c.cls)})`;
+// Age they turn on `dateStr`, if we know their birth year. For clients also show insurance age (age next birthday).
+function turningNote(c, dateStr) {
+  const by = Number(c.birthYear);
+  const n = by ? +dateStr.slice(0, 4) - by : 0;
+  if (!(n > 0 && n < 120)) return "";
+  return c.kind === "client" ? ` – turning ${n}, insurance age ${n}→${n + 1}` : ` – turning ${n}`;
+}
 
 export function buildMessage(data, today, mode) {
   const all = data.contacts || [];
@@ -70,12 +77,12 @@ export function buildMessage(data, today, mode) {
   if (bdToday.length) {
     lines.push("");
     lines.push(`<b>🎂 Birthday today (${bdToday.length})</b>`);
-    for (const c of bdToday) lines.push(`• ${label(c)}${c.note ? " – " + esc(String(c.note).slice(0, 80)) : ""}`);
+    for (const c of bdToday) lines.push(`• ${label(c)}${turningNote(c, today)}${c.note ? " | " + esc(String(c.note).slice(0, 80)) : ""}`);
   }
   if (bdTomorrow.length) {
     lines.push("");
     lines.push(`<b>🎂 Birthday tomorrow (${bdTomorrow.length})</b>`);
-    for (const c of bdTomorrow) lines.push(`• ${label(c)}`);
+    for (const c of bdTomorrow) lines.push(`• ${label(c)}${turningNote(c, addDay(today))}`);
   }
   if (contacts.length) {
     lines.push("");
