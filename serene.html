@@ -820,10 +820,14 @@
     <!-- Waiting on replies: who I've messaged and who I need to check back with -->
     <div class="card" id="wrCard">
       <div class="card-head">
-        <div class="card-title"><span class="icon">⏳</span>Waiting on replies</div>
+        <div class="card-title"><span class="icon">⏳</span>Waiting &amp; owed replies</div>
         <span class="td-chip" id="wrCount"></span>
       </div>
-      <div class="empty-note" style="padding:0 0 10px">Log it the moment you send a message. It tells you who to check back with, and when.</div>
+      <div class="empty-note" style="padding:0 0 10px">Waiting on them: log it when you send. I owe them: log it the moment you say "I'll get back to you". Both get a check-back date, so nothing sits with no deadline.</div>
+      <div class="ct-filter" id="wrDirBox" style="margin:0 0 8px">
+        <button class="active" data-dir="wait">Waiting on them</button>
+        <button data-dir="owe">I owe them a reply</button>
+      </div>
       <div class="wr-add">
         <input id="wrName" class="td-input" type="text" placeholder="Who? e.g. Diana">
         <input id="wrAbout" class="td-input" type="text" placeholder="About? e.g. confirm Fri 3pm meeting">
@@ -3445,25 +3449,26 @@ function renderWaiting(){
   const waiting = all.filter(f => !f.done).sort((a, b) => a.chaseDate < b.chaseDate ? -1 : a.chaseDate > b.chaseDate ? 1 : 0);
   const due = waiting.filter(f => f.chaseDate <= today).length;
   const chip = document.getElementById('wrCount');
-  chip.textContent = waiting.length ? (due ? `${due} to chase` : `${waiting.length} waiting`) : '';
+  chip.textContent = waiting.length ? (due ? `${due} due` : `${waiting.length} open`) : '';
   chip.className = 'td-chip' + (due ? ' overdue' : '');
   const recent = all.filter(f => f.done && f.doneAt && f.doneAt >= tdAddDays(today, -7)).sort((a, b) => a.doneAt < b.doneAt ? 1 : -1);
   let h = '';
-  if(!waiting.length) h += '<div class="empty-note">Nobody pending. Log a message above when you send it.</div>';
+  if(!waiting.length) h += '<div class="empty-note">Nothing pending. Log a message above when you send it, or when you promise to get back to someone.</div>';
   waiting.forEach(f => {
     const lab = wrDueLabel(f, today);
+    const owe = f.dir === 'owe';
     h += `<div class="wr-item">
-      <div class="wr-top"><span class="wr-name">${escHtml(f.name)}</span><span class="wr-about">${escHtml(f.about || '')}</span></div>
+      <div class="wr-top"><span class="wr-name">${escHtml(f.name)}</span>${owe ? '<span class="td-chip overdue">I owe them</span>' : ''}<span class="wr-about">${escHtml(f.about || '')}</span></div>
       <div class="wr-meta">
         <span class="td-chip ${lab.cls}">${lab.text}</span>
-        <span class="wr-sent">sent ${parseDate(f.sentDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}${f.chasedCount ? ` · chased ${f.chasedCount}x` : ''}</span>
-        <button class="quest-action-btn done-btn" data-wr="replied" data-id="${f.id}">✓ Replied</button>
-        <button class="quest-action-btn" data-wr="chased" data-id="${f.id}" title="Push the next check back by 2 days">↻ Chased</button>
+        <span class="wr-sent">${owe ? 'noted' : 'sent'} ${parseDate(f.sentDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}${f.chasedCount ? (owe ? ` · pushed ${f.chasedCount}x` : ` · chased ${f.chasedCount}x`) : ''}</span>
+        <button class="quest-action-btn done-btn" data-wr="replied" data-id="${f.id}">${owe ? '✓ Done' : '✓ Replied'}</button>
+        <button class="quest-action-btn" data-wr="chased" data-id="${f.id}" title="Push the next check back by 2 days">${owe ? '↻ Push 2d' : '↻ Chased'}</button>
         <button class="quest-action-btn" data-wr="del" data-id="${f.id}">✕</button>
       </div></div>`;
   });
   if(recent.length){
-    h += `<details class="wr-done-list"><summary>Replied in the last 7 days (${recent.length})</summary>` +
+    h += `<details class="wr-done-list"><summary>Closed in the last 7 days (${recent.length})</summary>` +
       recent.map(f => `<div class="wr-item"><div class="wr-top"><span class="wr-name">${escHtml(f.name)}</span><span class="wr-about">${escHtml(f.about || '')}</span><button class="quest-action-btn" data-wr="undo" data-id="${f.id}">↺ Undo</button></div></div>`).join('') +
       `</details>`;
   }
@@ -3472,6 +3477,14 @@ function renderWaiting(){
 function wireWaiting(){
   const nameEl = document.getElementById('wrName'), aboutEl = document.getElementById('wrAbout'), daysEl = document.getElementById('wrDays');
   if(!nameEl) return;
+  let wrDir = 'wait';
+  document.getElementById('wrDirBox').addEventListener('click', e => {
+    const b = e.target.closest('button[data-dir]'); if(!b) return;
+    wrDir = b.dataset.dir;
+    document.querySelectorAll('#wrDirBox button').forEach(x => x.classList.toggle('active', x === b));
+    daysEl.value = wrDir === 'owe' ? '1' : '2';          // things I owe default to tomorrow
+    aboutEl.placeholder = wrDir === 'owe' ? 'What did I promise? e.g. send quote' : 'About? e.g. confirm Fri 3pm meeting';
+  });
   if(!document.getElementById('ctNameList')){ const dl = document.createElement('datalist'); dl.id = 'ctNameList'; document.body.appendChild(dl); }
   nameEl.setAttribute('list', 'ctNameList');
   const add = () => {
@@ -3479,7 +3492,7 @@ function wireWaiting(){
     if(!name){ nameEl.focus(); return; }
     const today = logicalToday();
     cdata.followUps.push({
-      id: genId('w'), name, about: aboutEl.value.trim(), sentDate: today,
+      id: genId('w'), dir: wrDir, name, about: aboutEl.value.trim(), sentDate: today,
       chaseDate: tdAddDays(today, parseInt(daysEl.value, 10) || 2), done: false, doneAt: null, chasedCount: 0
     });
     if(!saveContacts()){ cdata.followUps.pop(); return; }

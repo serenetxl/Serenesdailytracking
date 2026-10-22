@@ -96,10 +96,19 @@ export function buildMessage(data, today, mode) {
     }
     if (sorted.length > MAX) lines.push(`…and ${sorted.length - MAX} more in the panel`);
   }
-  if (chase.length) {
+  const owe = chase.filter(f => f.dir === "owe");
+  const wait = chase.filter(f => f.dir !== "owe");
+  if (owe.length) {
     lines.push("");
-    lines.push(`<b>Check back with (${chase.length})</b>`);
-    for (const f of chase.slice(0, 15)) {
+    lines.push(`<b>You owe a reply (${owe.length})</b>`);
+    for (const f of owe.slice(0, 15)) {
+      lines.push(`• ${esc(f.name)}${f.about ? " – " + esc(f.about) : ""}`);
+    }
+  }
+  if (wait.length) {
+    lines.push("");
+    lines.push(`<b>Check back with (${wait.length})</b>`);
+    for (const f of wait.slice(0, 15)) {
       lines.push(`• ${esc(f.name)}${f.about ? " – " + esc(f.about) : ""}`);
     }
   }
