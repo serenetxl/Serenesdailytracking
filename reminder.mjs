@@ -44,14 +44,39 @@ export function decodeFields(f) {
 const CLASS_ORDER = ["A", "B", "C", "D"];
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// Birthdays are stored as "MM-DD". Feb 29 counts as Feb 28 in non-leap years.
+const isLeap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+export function bdayOn(md, dateStr) {
+  if (!md) return false;
+  const tail = dateStr.slice(5);
+  return md === tail || (md === "02-29" && tail === "02-28" && !isLeap(+dateStr.slice(0, 4)));
+}
+function addDay(dateStr, n = 1) { return new Date(Date.parse(dateStr) + n * 86400e3).toISOString().slice(0, 10); }
+const label = c => `${esc(c.name)} (${c.kind === "client" ? "Client" : "Prospect"} ${esc(c.cls)})`;
+
 export function buildMessage(data, today, mode) {
-  const contacts = (data.contacts || []).filter(c => c.nextDue && c.nextDue <= today);
+  const all = data.contacts || [];
+  const year = +today.slice(0, 4);
+  const contacts = all.filter(c => c.nextDue && c.nextDue <= today);
   const chase = (data.followUps || []).filter(f => !f.done && f.chaseDate && f.chaseDate <= today);
-  if (!contacts.length && !chase.length) return null;
+  // Morning: today's birthdays + a heads-up for tomorrow. Evening: only today's not yet wished.
+  const bdToday = all.filter(c => bdayOn(c.birthday, today) && (mode !== "evening" || c.bdayWished !== year));
+  const bdTomorrow = mode === "evening" ? [] : all.filter(c => bdayOn(c.birthday, addDay(today)));
+  if (!contacts.length && !chase.length && !bdToday.length && !bdTomorrow.length) return null;
 
   const lines = [];
   lines.push(mode === "evening" ? "<b>Still pending today</b>" : "<b>Good morning. Your 定联 for today</b>");
 
+  if (bdToday.length) {
+    lines.push("");
+    lines.push(`<b>🎂 Birthday today (${bdToday.length})</b>`);
+    for (const c of bdToday) lines.push(`• ${label(c)}${c.note ? " – " + esc(String(c.note).slice(0, 80)) : ""}`);
+  }
+  if (bdTomorrow.length) {
+    lines.push("");
+    lines.push(`<b>🎂 Birthday tomorrow (${bdTomorrow.length})</b>`);
+    for (const c of bdTomorrow) lines.push(`• ${label(c)}`);
+  }
   if (contacts.length) {
     lines.push("");
     lines.push(`<b>Message these people (${contacts.length})</b>`);
@@ -60,7 +85,7 @@ export function buildMessage(data, today, mode) {
       (CLASS_ORDER.indexOf(a.cls) - CLASS_ORDER.indexOf(b.cls)) || (a.nextDue < b.nextDue ? -1 : 1));
     for (const c of sorted.slice(0, MAX)) {
       const late = daysBetween(c.nextDue, today);
-      lines.push(`• ${esc(c.name)} (${c.kind === "client" ? "Client" : "Prospect"} ${esc(c.cls)})${late > 0 ? ` – ${late}d overdue` : ""}`);
+      lines.push(`• ${label(c)}${late > 0 ? ` – ${late}d overdue` : ""}`);
     }
     if (sorted.length > MAX) lines.push(`…and ${sorted.length - MAX} more in the panel`);
   }
