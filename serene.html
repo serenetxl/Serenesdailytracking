@@ -188,6 +188,49 @@
   .td-step{ display:flex; gap:8px; align-items:flex-start; font-size:13.5px; padding:3px 0; }
   .td-step.done span{ text-decoration: line-through; color: var(--ink-faint); }
   .td-step button{ margin-left:auto; background:none; border:none; color: var(--ink-faint); cursor:pointer; font-size:12px; }
+
+  /* Waiting on replies */
+  .wr-add{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:4px; }
+  .wr-add .full{ grid-column: 1 / -1; }
+  .wr-row2{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .wr-item{ padding:10px 0; border-bottom:1px solid var(--card-border); }
+  .wr-item:last-child{ border-bottom:none; }
+  .wr-top{ display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  .wr-name{ font-weight:600; font-size:14.5px; }
+  .wr-about{ font-size:13.5px; color: var(--ink-dim); flex:1; min-width:120px; }
+  .wr-meta{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+  .wr-sent{ font-size:11.5px; color: var(--ink-faint); font-family: var(--font-mono); }
+  .wr-done-list{ margin-top:10px; font-size:13px; color: var(--ink-dim); }
+  .wr-done-list summary{ cursor:pointer; }
+
+  /* 定联 */
+  .ct-filter{ display:flex; gap:6px; margin:4px 0 8px; }
+  .ct-filter button{ background:transparent; border:1px solid var(--card-border); color: var(--ink-dim); border-radius:999px; padding:4px 12px; font-size:12.5px; cursor:pointer; font-family:inherit; }
+  .ct-filter button.active{ background: var(--gold-soft); color: var(--gold); border-color: rgba(221,143,92,0.4); }
+  .ct-item{ padding:10px 0; border-bottom:1px solid var(--card-border); }
+  .ct-item:last-child{ border-bottom:none; }
+  .ct-top{ display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  .ct-name{ font-weight:600; font-size:14.5px; }
+  .ct-note{ font-size:12.5px; color: var(--ink-dim); flex:1; min-width:100px; }
+  .ct-class{ font-family: var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:999px; background: var(--track); color: var(--ink-dim); white-space:nowrap; }
+  .ct-class.A{ background: var(--teal-soft); color: var(--teal); }
+  .ct-class.B{ background: var(--gold-soft); color: var(--gold); }
+  .ct-group{ font-family: var(--font-display); font-weight:600; font-size:12.5px; color: var(--ink-dim); margin:14px 0 2px; }
+  .ct-edit{ margin-top:8px; padding:10px; border-radius:10px; background: var(--bg-elev); display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ct-edit .full{ grid-column:1 / -1; }
+  .ct-details{ margin-top:14px; font-size:13px; color: var(--ink-dim); }
+  .ct-details summary{ cursor:pointer; }
+  .ct-legend{ margin-top:8px; line-height:1.6; }
+  .ct-freq{ display:grid; grid-template-columns: auto repeat(4, 1fr); gap:6px 8px; align-items:center; margin-top:8px; }
+  .ct-freq input{ width:100%; padding:6px 8px; font-size:13px; }
+  .ct-sub{ font-size:12px; color: var(--ink-faint); margin-top:2px; }
+  .ct-details-text{ font-size:13px; color: var(--ink-dim); margin-top:4px; white-space:pre-wrap; }
+  .ct-details-text.clamp{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .ct-lab{ display:block; font-size:11.5px; color: var(--ink-faint); }
+  .ct-lab .td-input{ margin-top:3px; }
+  .ct-check{ width:17px; height:17px; accent-color: var(--teal); align-self:center; }
+  .quest-action-btn[disabled]{ opacity:.45; cursor:default; }
+  .ct-banner{ padding:12px 14px; border-radius:12px; background: var(--rose-soft); color: var(--rose); font-size:13px; margin-bottom:14px; line-height:1.5; }
   .td-sort{ margin-top:12px; padding:12px; border-radius:12px; background: var(--bg-elev); }
   .td-sort ol{ margin:0 0 10px; padding-left:18px; font-size:13px; color: var(--ink-dim); line-height:1.6; }
   .quest-steps{ margin:8px 0 0 32px; }
@@ -515,11 +558,12 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 21 Oct (3am day)</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 22 Oct</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
       <button data-view="pipeline">Pipeline</button>
+      <button data-view="contacts">定联</button>
       <button data-view="history">History</button>
     </nav>
   </header>
@@ -756,6 +800,107 @@
         <button class="ghost-btn" id="importBtn">↑ Import data</button>
         <input type="file" id="importFile" accept="application/json">
       </div>
+    </div>
+  </section>
+
+  <!-- ============ 定联 (regular contact) ============ -->
+  <section class="view" id="view-contacts">
+    <div id="ctBanner"></div>
+
+    <div class="card" id="ctDueCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">💬</span>Message today</div>
+        <span class="td-chip" id="ctDueCount"></span>
+      </div>
+      <div class="empty-note" style="padding:0 0 6px">When someone is due, drop them a message whether they reply or not. Tap Messaged and their clock restarts.</div>
+      <div id="ctDueList"></div>
+    </div>
+
+    <!-- Waiting on replies: who I've messaged and who I need to check back with -->
+    <div class="card" id="wrCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">⏳</span>Waiting on replies</div>
+        <span class="td-chip" id="wrCount"></span>
+      </div>
+      <div class="empty-note" style="padding:0 0 10px">Log it the moment you send a message. It tells you who to check back with, and when.</div>
+      <div class="wr-add">
+        <input id="wrName" class="td-input" type="text" placeholder="Who? e.g. Diana">
+        <input id="wrAbout" class="td-input" type="text" placeholder="About? e.g. confirm Fri 3pm meeting">
+        <div class="wr-row2 full">
+          <label style="font-size:12px;color:var(--ink-faint)">Check back in
+            <select id="wrDays" class="td-input" style="width:auto;display:inline-block;padding:7px 9px">
+              <option value="1">1 day</option><option value="2" selected>2 days</option><option value="3">3 days</option><option value="7">1 week</option>
+            </select></label>
+          <button class="edit-btn" id="wrAddBtn" style="margin-left:auto">+ Add</button>
+        </div>
+      </div>
+      <div id="wrList"></div>
+    </div>
+
+    <div class="card" id="ctAllCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">👥</span>Contacts</div>
+        <span class="td-chip" id="ctTotal"></span>
+      </div>
+      <div class="ct-filter" id="ctFilter">
+        <button class="active" data-f="all">All</button>
+        <button data-f="prospect">Prospects</button>
+        <button data-f="client">Clients</button>
+        <button id="ctSelectBtn" style="margin-left:auto">Select</button>
+      </div>
+      <input id="ctSearch" class="td-input" type="search" placeholder="Search name, IGN, details" style="margin-bottom:6px">
+      <div id="ctBulkBar" class="wr-meta" style="display:none;margin:6px 0 4px"></div>
+      <div id="ctAllList"></div>
+
+      <div class="td-sort" style="margin-top:16px">
+        <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
+        <textarea id="ctNames" class="td-input" rows="3" placeholder="One per line. Add a class letter at the end if you like:&#10;Diana A&#10;Kevin&#10;Mei Ling C"></textarea>
+        <div class="td-row">
+          <select id="ctKind" class="td-input" style="width:auto;padding:7px 9px"><option value="prospect">Prospect</option><option value="client">Client</option></select>
+          <select id="ctCls" class="td-input" style="width:auto;padding:7px 9px" title="Used when a line has no class"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
+          <button class="edit-btn" id="ctAddBtn" style="margin-left:auto">+ Add</button>
+        </div>
+        <div class="empty-note" id="ctAddMsg" style="padding:6px 0 0"></div>
+      </div>
+
+      <details class="ct-details" id="ctImportBox">
+        <summary>Import from Excel / export my list</summary>
+        <div style="margin-top:8px;line-height:1.55">
+          Columns: <b>Name</b>, IGN / Nickname, How I know them, Type (Prospect or Client), Class (A-D), Important details, Last messaged. Only Name is needed. Blank Type or Class use the two dropdowns above.
+          <div class="td-row">
+            <button class="quest-action-btn" id="ctTemplateBtn">Download template</button>
+            <label class="quest-action-btn" for="ctFile" style="cursor:pointer">Choose Excel / CSV file</label>
+            <input type="file" id="ctFile" accept=".xlsx,.xls,.csv,.txt">
+            <button class="quest-action-btn" id="ctExportBtn">Download my list</button>
+          </div>
+          <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
+          <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
+          <div id="ctImportPreview"></div>
+          <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name) is skipped. To remove people, tap Select above the list.</div>
+        </div>
+      </details>
+
+      <details class="ct-details">
+        <summary>What do the classes mean?</summary>
+        <div class="ct-legend">
+          <b>Prospects</b><br>
+          A: like and trust me, will meet me if I ask, talk about sensitive topics<br>
+          B: like me, not fully trust yet, only superficial chat<br>
+          C: kinda meh, not close at all<br>
+          D: don't even reply my messages<br><br>
+          <b>Clients</b><br>
+          A: centre of influence, refers people to me, 100% trust<br>
+          B: still my client but not the stickiest<br>
+          C: little potential to grow, buys a bit<br>
+          D: treats me like over-the-counter, or actually another advisor's client
+        </div>
+      </details>
+
+      <details class="ct-details">
+        <summary>How often to message (days)</summary>
+        <div class="ct-freq" id="ctFreqBox"></div>
+        <div class="empty-note" style="padding:6px 0 0">Changing this only affects the next time you tap Messaged. Defaults follow the Ding Lian book: A weekly, B 3 weeks, C 6 weeks, D 8 weeks.</div>
+      </details>
     </div>
   </section>
 
@@ -1303,6 +1448,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     try{
+      startContactsSync();
       state = await loadState();
       await checkDailyReset();
       checkWeeklyReset();
@@ -1343,6 +1489,7 @@ onAuthStateChanged(auth, async (user) => {
     }, 60 * 1000);
   } else {
     if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
+    stopContactsSync(); cdata = defaultContacts();
     if(resetIntervalId){ clearInterval(resetIntervalId); resetIntervalId = null; }
     stopTimerLoop();
     document.getElementById('auth-screen').classList.remove('hidden');
@@ -1371,6 +1518,7 @@ function wireTabs(){
       document.getElementById('view-' + view).classList.add('active');
       if(view === 'history') renderHistory();
       if(view === 'pipeline') renderPipeline();
+      if(view === 'contacts'){ renderContacts(); renderWaiting(); }
     });
   });
 }
@@ -2825,6 +2973,465 @@ function wireExportImport(){
   });
 }
 
+
+/* ---------- 定联: contacts + waiting on replies ---------- */
+// Contacts live in their own private document (private/contacts) that only
+// Serene's account can read, so client and prospect names stay off Odin's side.
+const contactsRef = doc(db, "private", "contacts");
+const CT_CLASSES = ['A', 'B', 'C', 'D'];
+// Same ladder for prospects and clients (A weekly, B 3 weeks, C 6 weeks, D 8 weeks).
+const CT_FREQ_VERSION = 2;
+const DEFAULT_CT_FREQ = {
+  prospect: { A: 7, B: 21, C: 42, D: 56 },
+  client:   { A: 7, B: 21, C: 42, D: 56 }
+};
+function defaultContacts(){ return { contacts: [], followUps: [], freq: JSON.parse(JSON.stringify(DEFAULT_CT_FREQ)), freqVersion: CT_FREQ_VERSION, updatedAt: 0 }; }
+let cdata = defaultContacts();
+let contactsReady = false, contactsError = false, unsubscribeContacts = null;
+let ctFilter = 'all', ctQuery = '', ctSelectMode = false, ctPending = null;
+const ctEditOpen = new Set(), ctSelected = new Set();
+
+function mergeContacts(raw){
+  const d = defaultContacts();
+  raw = raw || {};
+  d.contacts = Array.isArray(raw.contacts) ? raw.contacts : [];
+  d.followUps = Array.isArray(raw.followUps) ? raw.followUps : [];
+  // Older saves used a faster ladder; reset once to the current defaults.
+  if(raw.freqVersion === CT_FREQ_VERSION){
+    ['prospect', 'client'].forEach(k => CT_CLASSES.forEach(c => {
+      const v = raw.freq && raw.freq[k] && Number(raw.freq[k][c]);
+      if(v > 0) d.freq[k][c] = v;
+    }));
+  }
+  d.updatedAt = raw.updatedAt || 0;
+  return d;
+}
+function startContactsSync(){
+  if(unsubscribeContacts) return;
+  unsubscribeContacts = onSnapshot(contactsRef, (snap) => {
+    if(snap.metadata.hasPendingWrites) return;
+    cdata = snap.exists() ? mergeContacts(snap.data()) : defaultContacts();
+    contactsReady = true; contactsError = false;
+    renderContacts(); renderWaiting();
+  }, (err) => {
+    if(!auth.currentUser) return;
+    console.error('Contacts sync failed', err);
+    contactsError = true; renderContacts();
+  });
+}
+function stopContactsSync(){ if(unsubscribeContacts){ unsubscribeContacts(); unsubscribeContacts = null; } contactsReady = false; }
+function saveContacts(){
+  if(!contactsReady){ showToast('Still loading your contacts, try again in a second'); return false; }
+  cdata.updatedAt = Date.now(); cdata.freqVersion = CT_FREQ_VERSION;
+  setDoc(contactsRef, cdata).catch(e => { console.error('Contacts save failed', e); showToast('Could not save contacts'); });
+  return true;
+}
+function ctFreqDays(c){ return (cdata.freq[c.kind] && cdata.freq[c.kind][c.cls]) || 21; }
+function ctDueLabel(dateStr, today){
+  const diff = Math.round((parseDate(dateStr) - parseDate(today)) / 86400000);
+  if(diff < 0) return { cls: 'overdue', text: `${-diff}d overdue` };
+  if(diff === 0) return { cls: 'today', text: 'due today' };
+  if(diff === 1) return { cls: '', text: 'due tomorrow' };
+  return { cls: '', text: 'due ' + parseDate(dateStr).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' }) };
+}
+function ctKindLabel(k){ return k === 'client' ? 'Client' : 'Prospect'; }
+function ctMatches(c, q){
+  if(!q) return true;
+  return [c.name, c.aka, c.knownFrom, c.note].some(x => String(x || '').toLowerCase().includes(q));
+}
+
+function renderContacts(){
+  const dueWrap = document.getElementById('ctDueList'); if(!dueWrap) return;
+  const banner = document.getElementById('ctBanner');
+  banner.innerHTML = contactsError ? `<div class="ct-banner">Couldn't open your contacts. Publish the new Firestore rules (firestore.rules) in Firebase Console, then refresh.</div>` : '';
+  const today = logicalToday();
+  const all = cdata.contacts;
+  const rank = c => CT_CLASSES.indexOf(c.cls);
+  const due = all.filter(c => c.nextDue <= today).sort((a, b) => (rank(a) - rank(b)) || (a.nextDue < b.nextDue ? -1 : 1));
+  const chip = document.getElementById('ctDueCount');
+  chip.textContent = due.length ? `${due.length} to message` : ''; chip.className = 'td-chip' + (due.length ? ' overdue' : '');
+
+  const row = (c, mode) => {
+    const lab = ctDueLabel(c.nextDue, today);
+    const open = ctEditOpen.has(c.id);
+    const sub = [c.aka ? `IGN/nickname: ${escHtml(c.aka)}` : '', c.knownFrom ? escHtml(c.knownFrom) : ''].filter(Boolean).join(' · ');
+    let h = `<div class="ct-item">`;
+    h += `<div class="ct-top">${ctSelectMode && mode === 'all' ? `<input type="checkbox" class="ct-check" data-sel="${c.id}" ${ctSelected.has(c.id) ? 'checked' : ''}>` : ''}<span class="ct-name">${escHtml(c.name)}</span><span class="ct-class ${c.cls}">${ctKindLabel(c.kind)} ${c.cls}</span></div>`;
+    if(sub) h += `<div class="ct-sub">${sub}</div>`;
+    if(c.note) h += `<div class="ct-details-text ${mode === 'due' ? '' : 'clamp'}">${escHtml(c.note)}</div>`;
+    h += `<div class="wr-meta"><span class="td-chip ${lab.cls}">${lab.text}</span>
+        <span class="wr-sent">${c.lastContact ? 'last ' + parseDate(c.lastContact).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }) : 'not messaged yet'} · every ${ctFreqDays(c)}d</span>
+        <button class="quest-action-btn done-btn" data-ct="msg" data-id="${c.id}">✓ Messaged</button>`;
+    if(mode === 'due'){
+      h += `<button class="quest-action-btn" data-ct="msgwait" data-id="${c.id}" title="Messaged, and I need a reply: adds them to Waiting on replies">⏳ + waiting</button>
+        <button class="quest-action-btn" data-ct="snooze" data-id="${c.id}" title="Not today, ask again in 2 days">💤 +2d</button>`;
+    }
+    if(c.kind === 'prospect'){
+      h += `<button class="quest-action-btn" data-ct="toclient" data-id="${c.id}" title="They became my client">→ Client</button>`;
+    }
+    h += `<button class="quest-action-btn" data-ct="edit" data-id="${c.id}">${open ? '▾' : '✎'}</button></div>`;
+    if(open){
+      h += `<div class="ct-edit">
+        <label class="full ct-lab">Name<input class="td-input" data-f="name" value="${escHtml(c.name)}"></label>
+        <label class="ct-lab">IGN / nickname<input class="td-input" data-f="aka" value="${escHtml(c.aka || '')}"></label>
+        <label class="ct-lab">How I know them<input class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
+        <label class="ct-lab">Type<select class="td-input" data-f="kind"><option value="prospect" ${c.kind === 'prospect' ? 'selected' : ''}>Prospect</option><option value="client" ${c.kind === 'client' ? 'selected' : ''}>Client</option></select></label>
+        <label class="ct-lab">Class<select class="td-input" data-f="cls">${CT_CLASSES.map(x => `<option ${c.cls === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label class="full ct-lab">Important details<textarea class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
+        <label class="full ct-lab">Next message due <input class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
+        <div class="full wr-meta"><button class="quest-action-btn done-btn" data-ct="save" data-id="${c.id}">Save</button><button class="quest-action-btn" data-ct="del" data-id="${c.id}">Delete</button></div>
+      </div>`;
+    }
+    return h + '</div>';
+  };
+
+  dueWrap.innerHTML = due.length ? due.map(c => row(c, 'due')).join('')
+    : `<div class="empty-note">${all.length ? 'Nobody due today. Nice.' : 'No contacts yet. Add some below.'}</div>`;
+
+  // All contacts, grouped by kind then class
+  document.getElementById('ctTotal').textContent = all.length ? `${all.length}` : '';
+  document.querySelectorAll('#ctFilter button').forEach(b => b.classList.toggle('active', b.dataset.f === ctFilter));
+  const q = ctQuery.trim().toLowerCase();
+  const shown = all.filter(c => (ctFilter === 'all' || c.kind === ctFilter) && ctMatches(c, q));
+  let h = '';
+  ['client', 'prospect'].forEach(k => {
+    CT_CLASSES.forEach(cl => {
+      const g = shown.filter(c => c.kind === k && c.cls === cl).sort((a, b) => a.nextDue < b.nextDue ? -1 : 1);
+      if(!g.length) return;
+      h += `<div class="ct-group">${ctKindLabel(k)}s · ${cl} <span style="font-weight:400;color:var(--ink-faint)">· every ${cdata.freq[k][cl]} days · ${g.length}</span></div>` + g.map(c => row(c, 'all')).join('');
+    });
+  });
+  document.getElementById('ctAllList').innerHTML = h || `<div class="empty-note">${q ? 'No one matches that search.' : 'Nobody here yet.'}</div>`;
+
+  // Select mode bar
+  const selBtn = document.getElementById('ctSelectBtn');
+  if(selBtn) selBtn.textContent = ctSelectMode ? 'Done selecting' : 'Select';
+  const bar = document.getElementById('ctBulkBar');
+  if(bar){
+    bar.style.display = ctSelectMode ? 'flex' : 'none';
+    const n = ctSelected.size;
+    bar.innerHTML = ctSelectMode ? `<button class="quest-action-btn" data-bulk="all">Select all shown (${shown.length})</button>
+      <button class="quest-action-btn" data-bulk="none">Clear</button>
+      <button class="quest-action-btn" data-bulk="toclient" ${n ? '' : 'disabled'}>→ Client</button>
+      <button class="quest-action-btn" data-bulk="toprospect" ${n ? '' : 'disabled'}>→ Prospect</button>
+      <button class="quest-action-btn" data-bulk="del" ${n ? '' : 'disabled'}>Delete ${n || ''}</button>` : '';
+  }
+
+  // Frequency inputs (re-render only when not being edited)
+  const fb = document.getElementById('ctFreqBox');
+  if(fb && !fb.contains(document.activeElement)){
+    fb.innerHTML = '<span></span>' + CT_CLASSES.map(c => `<b style="text-align:center">${c}</b>`).join('') +
+      ['prospect', 'client'].map(k => `<span>${ctKindLabel(k)}</span>` + CT_CLASSES.map(c => `<input class="td-input" type="number" min="1" max="365" data-k="${k}" data-c="${c}" value="${cdata.freq[k][c]}">`).join('')).join('');
+  }
+  const dl = document.getElementById('ctNameList');
+  if(dl) dl.innerHTML = all.map(c => `<option value="${escHtml(c.name)}">`).join('');
+}
+
+function ctMarkMessaged(c){
+  const today = logicalToday();
+  c.lastContact = today; c.msgCount = (c.msgCount || 0) + 1;
+  c.nextDue = tdAddDays(today, ctFreqDays(c));
+}
+
+/* ----- Import / export (Excel, CSV, or pasted rows) ----- */
+const CT_COLS = ['Name', 'IGN / Nickname', 'How I know them', 'Type (Prospect or Client)', 'Class (A-D)', 'Important details', 'Last messaged'];
+const CT_ALIASES = {
+  name: ['name', 'full name', 'contact', 'person'],
+  aka: ['ign', 'nickname', 'aka', 'also known as', 'ign nickname', 'ign / nickname', 'alias', 'handle', 'ign or nickname'],
+  knownFrom: ['how i know them', 'how i know', 'known from', 'source', 'relationship', 'met through', 'where from'],
+  kind: ['type', 'kind', 'type prospect or client', 'prospect or client', 'prospect/client', 'list', 'sheet'],
+  cls: ['class', 'tier', 'grade', 'class a-d', 'class abcd'],
+  note: ['important details', 'details', 'notes', 'note', 'remarks', 'about'],
+  last: ['last messaged', 'last contacted', 'last contact', 'last message']
+};
+function ctNormHead(s){ return String(s == null ? '' : s).toLowerCase().replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function ctParseCsv(text){
+  const rows = []; let row = [], cur = '', q = false;
+  for(let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if(q){
+      if(ch === '"'){ if(text[i + 1] === '"'){ cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if(ch === '"') q = true;
+    else if(ch === ',' || ch === '\t'){ row.push(cur); cur = ''; }
+    else if(ch === '\n' || ch === '\r'){ if(ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if(cur !== '' || row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function ctToDate(v){
+  if(v == null || v === '') return null;
+  if(v instanceof Date && !isNaN(v)){ return fmtDate(new Date(v.getTime() + 12 * 3600e3)); }
+  const s = String(v).trim(); if(!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);   // day first (Singapore)
+  if(m){ const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; return `${y}-${pad(+m[2])}-${pad(+m[1])}`; }
+  const d = new Date(s); if(!isNaN(d)) return fmtDate(new Date(d.getTime() + 12 * 3600e3));
+  return null;
+}
+function ctRowsToPeople(rows, defKind, defCls){
+  rows = rows.map(r => r.map(c => (c instanceof Date ? c : String(c == null ? '' : c).trim()))).filter(r => r.some(c => c instanceof Date || c !== ''));
+  if(!rows.length) return { people: [], blank: 0 };
+  // Find the header row (a row that contains a Name column).
+  let map = null, start = 0;
+  const first = rows[0].map(ctNormHead);
+  if(first.some(h => CT_ALIASES.name.includes(h))){
+    map = {};
+    first.forEach((h, i) => { for(const k in CT_ALIASES){ if(map[k] == null && CT_ALIASES[k].includes(h)) map[k] = i; } });
+    start = 1;
+  } else if(rows[0].length === 1){ map = { name: 0 }; }
+  else { map = { name: 0, aka: 1, knownFrom: 2, kind: 3, cls: 4, note: 5, last: 6 }; }
+  const people = []; let blank = 0;
+  rows.slice(start).forEach(r => {
+    const g = k => (map[k] != null && r[map[k]] != null) ? r[map[k]] : '';
+    let name = String(g('name')).trim();
+    let cls = defCls;
+    const m = name.match(/^(.*\S)\s+([ABCDabcd])$/);   // allow "Diana A" in a names-only list
+    if(m && map.cls == null){ name = m[1].trim(); cls = m[2].toUpperCase(); }
+    if(!name){ blank++; return; }
+    const cv = String(g('cls')).trim().toUpperCase().replace(/^(CLASS|TIER)\s*/, '');
+    if(/^[ABCD]/.test(cv)) cls = cv[0];
+    const kv = String(g('kind')).toLowerCase();
+    const kind = kv ? (kv.includes('client') ? 'client' : 'prospect') : defKind;
+    people.push({ name, aka: String(g('aka')).trim(), knownFrom: String(g('knownFrom')).trim(), kind, cls, note: String(g('note')).trim(), last: ctToDate(g('last')) });
+  });
+  return { people, blank };
+}
+function ctPreview(rows){
+  const defKind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
+  const { people, blank } = ctRowsToPeople(rows, defKind, defCls);
+  const have = new Set(cdata.contacts.map(c => c.name.toLowerCase()));
+  const seen = new Set(); const fresh = []; let dup = 0;
+  people.forEach(p => { const k = p.name.toLowerCase(); if(have.has(k) || seen.has(k)){ dup++; return; } seen.add(k); fresh.push(p); });
+  ctPending = fresh;
+  const box = document.getElementById('ctImportPreview');
+  if(!fresh.length){ box.innerHTML = `<div class="empty-note">Nothing new to import.${dup ? ` ${dup} already on your list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}</div>`; return; }
+  const np = fresh.filter(p => p.kind === 'prospect').length, nc = fresh.length - np;
+  const sample = fresh.slice(0, 5).map(p => `${escHtml(p.name)} (${ctKindLabel(p.kind)} ${p.cls})`).join(', ');
+  box.innerHTML = `<div class="empty-note" style="padding:8px 0">Ready to import <b>${fresh.length}</b> people: ${np} prospects, ${nc} clients.${dup ? ` Skipping ${dup} already on the list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}<br>e.g. ${sample}${fresh.length > 5 ? '…' : ''}</div>
+    <button class="edit-btn" id="ctImportGo">Import ${fresh.length}</button> <button class="quest-action-btn" id="ctImportCancel">Cancel</button>`;
+}
+function ctDoImport(){
+  if(!ctPending || !ctPending.length) return;
+  const today = logicalToday(); let spread = 0;
+  ctPending.forEach(p => {
+    const c = { id: genId('c'), name: p.name, aka: p.aka, knownFrom: p.knownFrom, kind: p.kind, cls: p.cls, note: p.note, lastContact: p.last || null, nextDue: today, msgCount: 0, createdAt: today };
+    if(p.last) c.nextDue = tdAddDays(p.last, ctFreqDays(c));
+    else c.nextDue = tdAddDays(today, spread++ % ctFreqDays(c));   // spread new names over their first cycle
+    cdata.contacts.push(c);
+  });
+  const n = ctPending.length;
+  if(!saveContacts()){ cdata.contacts.length -= n; return; }
+  ctPending = null; document.getElementById('ctImportPreview').innerHTML = '';
+  document.getElementById('ctPaste').value = '';
+  renderContacts(); showToast(`Imported ${n} people`);
+}
+function ctDownload(name, text){
+  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function ctCsvCell(v){ v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function ctLoadSheetJs(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX); s.onerror = () => reject(new Error('Could not load the Excel reader'));
+    document.head.appendChild(s);
+  });
+}
+async function ctReadFile(file){
+  const msg = document.getElementById('ctImportPreview');
+  try{
+    let rows;
+    if(/\.(csv|txt)$/i.test(file.name)){ rows = ctParseCsv(await file.text()); }
+    else {
+      const X = await ctLoadSheetJs();
+      const wb = X.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+      rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+    }
+    ctPreview(rows);
+  }catch(e){ console.error(e); msg.innerHTML = `<div class="ct-banner">Couldn't read that file. Try saving it as CSV and upload again.</div>`; }
+}
+
+function wireContacts(){
+  const addBtn = document.getElementById('ctAddBtn'); if(!addBtn) return;
+  const msg = t => { const el = document.getElementById('ctAddMsg'); el.textContent = t; setTimeout(() => { if(el.textContent === t) el.textContent = ''; }, 4000); };
+  addBtn.addEventListener('click', () => {
+    const ta = document.getElementById('ctNames');
+    const kind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
+    const lines = ta.value.split('\n').map(x => x.trim()).filter(Boolean);
+    if(!lines.length){ msg('Type a name first'); return; }
+    const today = logicalToday(); let added = 0, skipped = 0;
+    lines.forEach(line => {
+      let cls = defCls, name = line;
+      const m = line.match(/^(.*\S)\s+([ABCDabcd])$/);
+      if(m){ name = m[1].trim(); cls = m[2].toUpperCase(); }
+      if(cdata.contacts.some(c => c.name.toLowerCase() === name.toLowerCase())){ skipped++; return; }
+      const c = { id: genId('c'), name, aka: '', knownFrom: '', kind, cls, note: '', lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
+      // Several at once: spread them across their cycle so they don't all land on one day.
+      if(lines.length > 1) c.nextDue = tdAddDays(today, added % ctFreqDays(c));
+      cdata.contacts.push(c); added++;
+    });
+    if(added && saveContacts()){ ta.value = ''; renderContacts(); }
+    msg(`${added ? 'Added ' + added : 'Nothing added'}${skipped ? ` (${skipped} already on the list)` : ''}${added > 1 ? '. Spread over their first cycle.' : ''}`);
+  });
+  document.getElementById('ctFilter').addEventListener('click', e => {
+    const b = e.target.closest('button[data-f]'); if(!b) return;
+    ctFilter = b.dataset.f; renderContacts();
+  });
+  document.getElementById('ctSearch').addEventListener('input', e => { ctQuery = e.target.value; renderContacts(); });
+  document.getElementById('ctSelectBtn').addEventListener('click', () => { ctSelectMode = !ctSelectMode; if(!ctSelectMode) ctSelected.clear(); renderContacts(); });
+
+  const onClick = e => {
+    const b = e.target.closest('button[data-ct]'); if(!b) return;
+    const c = cdata.contacts.find(x => x.id === b.dataset.id); if(!c) return;
+    const act = b.dataset.ct, today = logicalToday();
+    if(act === 'msg'){ ctMarkMessaged(c); }
+    else if(act === 'msgwait'){
+      ctMarkMessaged(c);
+      cdata.followUps.push({ id: genId('w'), name: c.name, about: '', sentDate: today, chaseDate: tdAddDays(today, 2), done: false, doneAt: null, chasedCount: 0 });
+      showToast('Added to Waiting on replies');
+    }
+    else if(act === 'snooze'){ c.nextDue = tdAddDays(today, 2); }
+    else if(act === 'toclient'){ c.kind = 'client'; ctEditOpen.add(c.id); showToast(`${c.name} is now a client. Check their class.`); }
+    else if(act === 'edit'){ if(ctEditOpen.has(c.id)) ctEditOpen.delete(c.id); else ctEditOpen.add(c.id); renderContacts(); return; }
+    else if(act === 'del'){ if(!confirm(`Delete ${c.name}?`)) return; cdata.contacts = cdata.contacts.filter(x => x.id !== c.id); ctEditOpen.delete(c.id); ctSelected.delete(c.id); }
+    else if(act === 'save'){
+      const box = b.closest('.ct-edit'); const val = f => box.querySelector(`[data-f="${f}"]`).value;
+      const nm = val('name').trim(); if(!nm){ showToast('Name can\'t be empty'); return; }
+      c.name = nm; c.aka = val('aka').trim(); c.knownFrom = val('knownFrom').trim(); c.kind = val('kind'); c.cls = val('cls'); c.note = val('note').trim();
+      if(val('nextDue')) c.nextDue = val('nextDue');
+      ctEditOpen.delete(c.id);
+    }
+    if(saveContacts()){ renderContacts(); renderWaiting(); }
+  };
+  document.getElementById('ctDueList').addEventListener('click', onClick);
+  document.getElementById('ctAllList').addEventListener('click', onClick);
+  document.getElementById('ctAllList').addEventListener('change', e => {
+    const cb = e.target.closest('input[data-sel]'); if(!cb) return;
+    if(cb.checked) ctSelected.add(cb.dataset.sel); else ctSelected.delete(cb.dataset.sel);
+    renderContacts();
+  });
+  document.getElementById('ctBulkBar').addEventListener('click', e => {
+    const b = e.target.closest('button[data-bulk]'); if(!b || b.disabled) return;
+    const act = b.dataset.bulk;
+    if(act === 'all'){
+      const q = ctQuery.trim().toLowerCase();
+      cdata.contacts.filter(c => (ctFilter === 'all' || c.kind === ctFilter) && ctMatches(c, q)).forEach(c => ctSelected.add(c.id));
+      renderContacts(); return;
+    }
+    if(act === 'none'){ ctSelected.clear(); renderContacts(); return; }
+    const ids = ctSelected;
+    if(act === 'del'){
+      if(!confirm(`Delete ${ids.size} ${ids.size === 1 ? 'person' : 'people'}? This can't be undone.`)) return;
+      cdata.contacts = cdata.contacts.filter(c => !ids.has(c.id)); ctSelected.clear();
+    } else {
+      const k = act === 'toclient' ? 'client' : 'prospect';
+      cdata.contacts.forEach(c => { if(ids.has(c.id)) c.kind = k; });
+      showToast(`Moved ${ids.size} to ${ctKindLabel(k)}s`); ctSelected.clear();
+    }
+    if(saveContacts()) renderContacts();
+  });
+  document.getElementById('ctFreqBox').addEventListener('change', e => {
+    const i = e.target; if(!i.dataset.k) return;
+    const v = parseInt(i.value, 10); if(!(v > 0)) { renderContacts(); return; }
+    cdata.freq[i.dataset.k][i.dataset.c] = v; saveContacts();
+  });
+
+  // Import / export
+  document.getElementById('ctTemplateBtn').addEventListener('click', () => {
+    const ex = [
+      ['Diana Tan', 'dianat', 'Ex-colleague at ABC', 'Client', 'A', 'Has 2 kids. Refers her friends. Loves hiking.', ''],
+      ['Kevin Lim', 'KevLim88', 'Guild member', 'Prospect', 'B', 'Just started a new job in IT', '2026-10-15']
+    ];
+    ctDownload('contacts-template.csv', [CT_COLS, ...ex].map(r => r.map(ctCsvCell).join(',')).join('\r\n'));
+  });
+  document.getElementById('ctExportBtn').addEventListener('click', () => {
+    const rows = cdata.contacts.map(c => [c.name, c.aka || '', c.knownFrom || '', ctKindLabel(c.kind), c.cls, c.note || '', c.lastContact || '']);
+    ctDownload('my-contacts.csv', [CT_COLS, ...rows].map(r => r.map(ctCsvCell).join(',')).join('\r\n'));
+  });
+  document.getElementById('ctFile').addEventListener('change', e => { const f = e.target.files[0]; if(f) ctReadFile(f); e.target.value = ''; });
+  document.getElementById('ctParseBtn').addEventListener('click', () => {
+    const t = document.getElementById('ctPaste').value;
+    if(!t.trim()){ document.getElementById('ctImportPreview').innerHTML = '<div class="empty-note">Paste some rows first.</div>'; return; }
+    ctPreview(ctParseCsv(t));
+  });
+  document.getElementById('ctImportPreview').addEventListener('click', e => {
+    if(e.target.id === 'ctImportGo') ctDoImport();
+    if(e.target.id === 'ctImportCancel'){ ctPending = null; e.currentTarget.innerHTML = ''; }
+  });
+}
+
+/* Waiting on replies: ad-hoc messages where I asked something and need to chase. */
+function wrDueLabel(f, today){
+  const l = ctDueLabel(f.chaseDate, today);
+  return { cls: l.cls, text: 'Check back: ' + l.text.replace(/^due /, '') };
+}
+function renderWaiting(){
+  const wrap = document.getElementById('wrList'); if(!wrap) return;
+  const today = logicalToday();
+  const all = cdata.followUps || [];
+  const waiting = all.filter(f => !f.done).sort((a, b) => a.chaseDate < b.chaseDate ? -1 : a.chaseDate > b.chaseDate ? 1 : 0);
+  const due = waiting.filter(f => f.chaseDate <= today).length;
+  const chip = document.getElementById('wrCount');
+  chip.textContent = waiting.length ? (due ? `${due} to chase` : `${waiting.length} waiting`) : '';
+  chip.className = 'td-chip' + (due ? ' overdue' : '');
+  const recent = all.filter(f => f.done && f.doneAt && f.doneAt >= tdAddDays(today, -7)).sort((a, b) => a.doneAt < b.doneAt ? 1 : -1);
+  let h = '';
+  if(!waiting.length) h += '<div class="empty-note">Nobody pending. Log a message above when you send it.</div>';
+  waiting.forEach(f => {
+    const lab = wrDueLabel(f, today);
+    h += `<div class="wr-item">
+      <div class="wr-top"><span class="wr-name">${escHtml(f.name)}</span><span class="wr-about">${escHtml(f.about || '')}</span></div>
+      <div class="wr-meta">
+        <span class="td-chip ${lab.cls}">${lab.text}</span>
+        <span class="wr-sent">sent ${parseDate(f.sentDate).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}${f.chasedCount ? ` · chased ${f.chasedCount}x` : ''}</span>
+        <button class="quest-action-btn done-btn" data-wr="replied" data-id="${f.id}">✓ Replied</button>
+        <button class="quest-action-btn" data-wr="chased" data-id="${f.id}" title="Push the next check back by 2 days">↻ Chased</button>
+        <button class="quest-action-btn" data-wr="del" data-id="${f.id}">✕</button>
+      </div></div>`;
+  });
+  if(recent.length){
+    h += `<details class="wr-done-list"><summary>Replied in the last 7 days (${recent.length})</summary>` +
+      recent.map(f => `<div class="wr-item"><div class="wr-top"><span class="wr-name">${escHtml(f.name)}</span><span class="wr-about">${escHtml(f.about || '')}</span><button class="quest-action-btn" data-wr="undo" data-id="${f.id}">↺ Undo</button></div></div>`).join('') +
+      `</details>`;
+  }
+  wrap.innerHTML = h;
+}
+function wireWaiting(){
+  const nameEl = document.getElementById('wrName'), aboutEl = document.getElementById('wrAbout'), daysEl = document.getElementById('wrDays');
+  if(!nameEl) return;
+  if(!document.getElementById('ctNameList')){ const dl = document.createElement('datalist'); dl.id = 'ctNameList'; document.body.appendChild(dl); }
+  nameEl.setAttribute('list', 'ctNameList');
+  const add = () => {
+    const name = nameEl.value.trim();
+    if(!name){ nameEl.focus(); return; }
+    const today = logicalToday();
+    cdata.followUps.push({
+      id: genId('w'), name, about: aboutEl.value.trim(), sentDate: today,
+      chaseDate: tdAddDays(today, parseInt(daysEl.value, 10) || 2), done: false, doneAt: null, chasedCount: 0
+    });
+    if(!saveContacts()){ cdata.followUps.pop(); return; }
+    nameEl.value = ''; aboutEl.value = '';
+    renderWaiting(); nameEl.focus();
+  };
+  document.getElementById('wrAddBtn').addEventListener('click', add);
+  [nameEl, aboutEl].forEach(el => el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); add(); } }));
+  document.getElementById('wrList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-wr]'); if(!b) return;
+    const f = cdata.followUps.find(x => x.id === b.dataset.id); if(!f) return;
+    const today = logicalToday();
+    if(b.dataset.wr === 'replied'){ f.done = true; f.doneAt = today; }
+    else if(b.dataset.wr === 'undo'){ f.done = false; f.doneAt = null; }
+    else if(b.dataset.wr === 'chased'){ f.chasedCount = (f.chasedCount || 0) + 1; f.chaseDate = tdAddDays(today, 2); }
+    else if(b.dataset.wr === 'del'){ cdata.followUps = cdata.followUps.filter(x => x.id !== f.id); }
+    if(saveContacts()) renderWaiting();
+  });
+}
 /* ---------- Render all / wire all ---------- */
 function renderAll(){
   renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderFycGoals(); renderUnfinished(); renderTodos();
@@ -2832,9 +3439,10 @@ function renderAll(){
   renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
   if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
+  renderContacts(); renderWaiting();
 }
 function wireAllHandlers(){
-  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals(); wireTodos();
+  wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals(); wireWaiting(); wireContacts(); wireTodos();
   wireTouchpointExercise(); wireSubmitDay(); wirePipeline(); wireExportImport();
 }
 </script>
