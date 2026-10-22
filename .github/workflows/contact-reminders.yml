@@ -1,0 +1,24 @@
+name: 定联 reminders
+
+on:
+  schedule:
+    - cron: "0 1 * * *"    # 9:00 am Singapore: today's list
+    - cron: "0 9 * * *"    # 5:00 pm Singapore: only if still pending
+  workflow_dispatch:        # lets you press "Run workflow" to test it
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send reminder
+        env:
+          FIREBASE_PASSWORD: ${{ secrets.FIREBASE_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 9 * * *" ]; then MODE=evening; else MODE=morning; fi
+          node reminder.mjs $MODE
