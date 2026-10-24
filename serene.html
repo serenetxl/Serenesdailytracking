@@ -2191,11 +2191,11 @@ function renderTouchpointExercise(){
   const tpBtn = document.getElementById('touchpointBtn');
   const tpPhotoInput = document.getElementById('touchpointPhotoInput');
   tpBtn.disabled = state.today.touchpoint.logged;
-  tpPhotoInput.disabled = state.today.touchpoint.logged;
+  tpPhotoInput.disabled = state.today.touchpoint.approved === 'approved';   // can still add/replace the photo until approved
   tpBtn.textContent = state.today.touchpoint.logged
     ? (state.today.touchpoint.approved === 'approved' ? 'Logged — approved ✓' : state.today.touchpoint.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
     : 'Log a touchpoint today';
-  document.getElementById('touchpointPhotoNote').textContent = state.today.touchpoint.photoUrl ? 'Photo attached ✓' : '';
+  document.getElementById('touchpointPhotoNote').textContent = proofNoteText('touchpoint');
   const exLine = document.getElementById('exerciseStatusLine');
   exLine.textContent = state.today.exercise.logged
     ? (state.today.exercise.approved === 'approved' ? 'Logged — approved ✓' : state.today.exercise.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
@@ -2203,46 +2203,84 @@ function renderTouchpointExercise(){
   const exBtn = document.getElementById('exerciseBtn');
   const exPhotoInput = document.getElementById('exercisePhotoInput');
   exBtn.disabled = state.today.exercise.logged;
-  exPhotoInput.disabled = state.today.exercise.logged;
-  document.getElementById('exercisePhotoNote').textContent = state.today.exercise.photoUrl ? 'Photo attached ✓' : '';
+  exPhotoInput.disabled = state.today.exercise.approved === 'approved';
+  document.getElementById('exercisePhotoNote').textContent = proofNoteText('exercise');
+}
+// Proof photos: shrink the picture first (phone photos are huge, and a slow upload
+// is easily cut off if the app is switched away), then upload. A photo can be added
+// or replaced after logging, until Odin approves it.
+const proofNote = { touchpoint: '', exercise: '' };
+function proofNoteText(kind){
+  const o = state.today[kind];
+  if(proofNote[kind]) return proofNote[kind];
+  if(o.photoUrl) return 'Photo attached ✓';
+  if(o.logged && o.approved !== 'approved') return 'No photo yet. Pick one above and it uploads straight away.';
+  return '';
+}
+async function compressForUpload(file){
+  try{
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+    return blob ? new File([blob], 'proof.jpg', { type: 'image/jpeg' }) : file;
+  }catch(e){ return file; }   // e.g. a format the browser can't decode: send it as it is
+}
+function withTimeout(promise, ms){
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timed out'), { code: 'timed-out' })), ms))]);
+}
+async function attachProof(kind, file){
+  const date = state.today.date;
+  proofNote[kind] = 'Uploading photo… keep this page open';
+  renderTouchpointExercise();
+  try{
+    const f = await compressForUpload(file);
+    const url = await withTimeout(uploadProofPhoto(storage, kind + '-proof', date, f), 60000);
+    if(state.today.date === date && state.today[kind] && state.today[kind].logged){
+      state.today[kind].photoUrl = url;
+      proofNote[kind] = '';
+      saveState(); renderTouchpointExercise();
+      showToast('Photo uploaded. Odin can see it now.');
+    } else { proofNote[kind] = ''; renderTouchpointExercise(); }
+  }catch(e){
+    console.error('Photo upload failed', e);
+    const code = (e && (e.code || e.message)) || 'unknown';
+    proofNote[kind] = `Upload failed (${code}). Pick the photo again to retry.`;
+    renderTouchpointExercise();
+    showToast('Photo upload failed: ' + code);
+  }
 }
 function wireTouchpointExercise(){
-  document.getElementById('touchpointBtn').addEventListener('click', async () => {
+  ['touchpoint', 'exercise'].forEach(kind => {
+    const input = document.getElementById(kind + 'PhotoInput');
+    // Picking a photo after the proof is already logged uploads it immediately.
+    input.addEventListener('change', () => {
+      const file = input.files[0]; if(!file) return;
+      const o = state.today[kind];
+      if(o.logged && o.approved !== 'approved'){ input.value = ''; attachProof(kind, file); }
+      else if(!o.logged){ proofNote[kind] = 'Photo ready. Tap the Log button to send it.'; renderTouchpointExercise(); }
+    });
+  });
+  document.getElementById('touchpointBtn').addEventListener('click', () => {
     const fileInput = document.getElementById('touchpointPhotoInput');
-    const file = fileInput.files[0];
+    const file = fileInput.files[0]; fileInput.value = '';
     state.today.touchpoint = { logged: true, approved: 'pending', photoUrl: null };
     state.touchpointChallenge = logTouchpoint(state.touchpointChallenge);
+    proofNote.touchpoint = '';
     saveState(); renderTouchpointExercise();
-    showToast(file ? 'Touchpoint logged — uploading photo…' : 'Touchpoint logged — pending Odin (no photo attached)');
-    if(file){
-      try{
-        const url = await uploadProofPhoto(storage, 'touchpoint-proof', state.today.date, file);
-        state.today.touchpoint.photoUrl = url;
-        saveState(); renderTouchpointExercise();
-        showToast('Photo uploaded');
-      }catch(e){
-        console.error('Photo upload failed', e);
-        showToast('Photo upload failed — touchpoint still logged, add proof later if needed');
-      }
-    }
+    showToast(file ? 'Touchpoint logged. Uploading photo…' : 'Touchpoint logged, pending Odin (no photo yet)');
+    if(file) attachProof('touchpoint', file);
   });
-  document.getElementById('exerciseBtn').addEventListener('click', async () => {
+  document.getElementById('exerciseBtn').addEventListener('click', () => {
     const fileInput = document.getElementById('exercisePhotoInput');
-    const file = fileInput.files[0];
+    const file = fileInput.files[0]; fileInput.value = '';
     state.today.exercise = { logged: true, approved: 'pending', photoUrl: null };
+    proofNote.exercise = '';
     saveState(); renderTouchpointExercise();
-    showToast(file ? 'Exercise logged — uploading photo…' : 'Exercise logged — pending Odin (no photo attached)');
-    if(file){
-      try{
-        const url = await uploadProofPhoto(storage, 'exercise-proof', state.today.date, file);
-        state.today.exercise.photoUrl = url;
-        saveState(); renderTouchpointExercise();
-        showToast('Photo uploaded');
-      }catch(e){
-        console.error('Photo upload failed', e);
-        showToast('Photo upload failed — exercise still logged, add proof later if needed');
-      }
-    }
+    showToast(file ? 'Exercise logged. Uploading photo…' : 'Exercise logged, pending Odin (no photo yet)');
+    if(file) attachProof('exercise', file);
   });
 }
 
