@@ -230,6 +230,19 @@
   .ct-lab .td-input{ margin-top:3px; }
   .ct-check{ width:17px; height:17px; accent-color: var(--teal); align-self:center; }
   .quest-action-btn[disabled]{ opacity:.45; cursor:default; }
+  .ct-tools{ margin:4px 0 12px; border:1px solid var(--card-border); border-radius:12px; padding:8px 12px; }
+  .ct-tools > summary{ cursor:pointer; font-weight:600; font-size:13.5px; color: var(--gold); }
+  .ct-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); column-gap:26px; }
+  .ct-grid > .ct-item.open{ grid-column: 1 / -1; }
+  .ct-grp{ border-bottom:1px solid var(--card-border); }
+  .ct-grp > summary{ cursor:pointer; padding:10px 0; font-family: var(--font-display); font-weight:600; font-size:13.5px; color: var(--ink-dim); list-style:none; display:flex; gap:8px; align-items:baseline; }
+  .ct-grp > summary::-webkit-details-marker{ display:none; }
+  .ct-grp > summary::before{ content:'▸'; color: var(--ink-faint); }
+  .ct-grp[open] > summary::before{ content:'▾'; }
+  .ct-item.compact{ padding:6px 0; }
+  .ct-line{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ct-line .ct-name{ font-size:14px; }
+  .ct-actions{ margin-left:auto; display:flex; gap:4px; }
   .ct-banner{ padding:12px 14px; border-radius:12px; background: var(--rose-soft); color: var(--rose); font-size:13px; margin-bottom:14px; line-height:1.5; }
   .td-sort{ margin-top:12px; padding:12px; border-radius:12px; background: var(--bg-elev); }
   .td-sort ol{ margin:0 0 10px; padding-left:18px; font-size:13px; color: var(--ink-dim); line-height:1.6; }
@@ -847,6 +860,58 @@
         <div class="card-title"><span class="icon">👥</span>Contacts</div>
         <span class="td-chip" id="ctTotal"></span>
       </div>
+      <details class="ct-tools" id="ctTools">
+        <summary>＋ Add people · import · settings</summary>
+      <div class="td-sort" style="margin-top:10px">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
+          <textarea id="ctNames" class="td-input" rows="3" placeholder="One per line. Add a class letter at the end if you like:&#10;Diana A&#10;Kevin&#10;Mei Ling C"></textarea>
+          <div class="td-row">
+            <select id="ctKind" class="td-input" style="width:auto;padding:7px 9px"><option value="prospect">Prospect</option><option value="client">Client</option></select>
+            <select id="ctCls" class="td-input" style="width:auto;padding:7px 9px" title="Used when a line has no class"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
+            <button class="edit-btn" id="ctAddBtn" style="margin-left:auto">+ Add</button>
+          </div>
+          <div class="empty-note" id="ctAddMsg" style="padding:6px 0 0"></div>
+        </div>
+  
+        <details class="ct-details" id="ctImportBox">
+          <summary>Import from Excel / export my list</summary>
+          <div style="margin-top:8px;line-height:1.55">
+            Columns: <b>Name</b>, IGN / Nickname, How I know them, Type (Prospect or Client), Class (A-D), Important details, Last messaged, Birthday (e.g. 14 Mar 1990, year optional). Only Name is needed. Blank Type or Class use the two dropdowns above.
+            <div class="td-row">
+              <button class="quest-action-btn" id="ctTemplateBtn">Download template</button>
+              <label class="quest-action-btn" for="ctFile" style="cursor:pointer">Choose Excel / CSV file</label>
+              <input type="file" id="ctFile" accept=".xlsx,.xls,.csv,.txt">
+              <button class="quest-action-btn" id="ctExportBtn">Download my list</button>
+            </div>
+            <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
+            <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
+            <div id="ctImportPreview"></div>
+            <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name) is skipped. To remove people, tap Select above the list.</div>
+          </div>
+        </details>
+  
+        <details class="ct-details">
+          <summary>What do the classes mean?</summary>
+          <div class="ct-legend">
+            <b>Prospects</b><br>
+            A: like and trust me, will meet me if I ask, talk about sensitive topics<br>
+            B: like me, not fully trust yet, only superficial chat<br>
+            C: kinda meh, not close at all<br>
+            D: don't even reply my messages<br><br>
+            <b>Clients</b><br>
+            A: centre of influence, refers people to me, 100% trust<br>
+            B: still my client but not the stickiest<br>
+            C: little potential to grow, buys a bit<br>
+            D: treats me like over-the-counter, or actually another advisor's client
+          </div>
+        </details>
+  
+        <details class="ct-details">
+          <summary>How often to message (days)</summary>
+          <div class="ct-freq" id="ctFreqBox"></div>
+          <div class="empty-note" style="padding:6px 0 0">Changing this only affects the next time you tap Messaged. Defaults follow the Ding Lian book: A weekly, B 3 weeks, C 6 weeks, D 8 weeks.</div>
+        </details>
+      </details>
       <div class="ct-filter" id="ctFilter">
         <button class="active" data-f="all">All</button>
         <button data-f="prospect">Prospects</button>
@@ -856,56 +921,6 @@
       <input id="ctSearch" class="td-input" type="search" placeholder="Search name, IGN, details" style="margin-bottom:6px">
       <div id="ctBulkBar" class="wr-meta" style="display:none;margin:6px 0 4px"></div>
       <div id="ctAllList"></div>
-
-      <div class="td-sort" style="margin-top:16px">
-        <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
-        <textarea id="ctNames" class="td-input" rows="3" placeholder="One per line. Add a class letter at the end if you like:&#10;Diana A&#10;Kevin&#10;Mei Ling C"></textarea>
-        <div class="td-row">
-          <select id="ctKind" class="td-input" style="width:auto;padding:7px 9px"><option value="prospect">Prospect</option><option value="client">Client</option></select>
-          <select id="ctCls" class="td-input" style="width:auto;padding:7px 9px" title="Used when a line has no class"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
-          <button class="edit-btn" id="ctAddBtn" style="margin-left:auto">+ Add</button>
-        </div>
-        <div class="empty-note" id="ctAddMsg" style="padding:6px 0 0"></div>
-      </div>
-
-      <details class="ct-details" id="ctImportBox">
-        <summary>Import from Excel / export my list</summary>
-        <div style="margin-top:8px;line-height:1.55">
-          Columns: <b>Name</b>, IGN / Nickname, How I know them, Type (Prospect or Client), Class (A-D), Important details, Last messaged, Birthday (e.g. 14 Mar 1990, year optional). Only Name is needed. Blank Type or Class use the two dropdowns above.
-          <div class="td-row">
-            <button class="quest-action-btn" id="ctTemplateBtn">Download template</button>
-            <label class="quest-action-btn" for="ctFile" style="cursor:pointer">Choose Excel / CSV file</label>
-            <input type="file" id="ctFile" accept=".xlsx,.xls,.csv,.txt">
-            <button class="quest-action-btn" id="ctExportBtn">Download my list</button>
-          </div>
-          <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
-          <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
-          <div id="ctImportPreview"></div>
-          <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name) is skipped. To remove people, tap Select above the list.</div>
-        </div>
-      </details>
-
-      <details class="ct-details">
-        <summary>What do the classes mean?</summary>
-        <div class="ct-legend">
-          <b>Prospects</b><br>
-          A: like and trust me, will meet me if I ask, talk about sensitive topics<br>
-          B: like me, not fully trust yet, only superficial chat<br>
-          C: kinda meh, not close at all<br>
-          D: don't even reply my messages<br><br>
-          <b>Clients</b><br>
-          A: centre of influence, refers people to me, 100% trust<br>
-          B: still my client but not the stickiest<br>
-          C: little potential to grow, buys a bit<br>
-          D: treats me like over-the-counter, or actually another advisor's client
-        </div>
-      </details>
-
-      <details class="ct-details">
-        <summary>How often to message (days)</summary>
-        <div class="ct-freq" id="ctFreqBox"></div>
-        <div class="empty-note" style="padding:6px 0 0">Changing this only affects the next time you tap Messaged. Defaults follow the Ding Lian book: A weekly, B 3 weeks, C 6 weeks, D 8 weeks.</div>
-      </details>
     </div>
   </section>
 
@@ -3032,7 +3047,7 @@ function defaultContacts(){ return { contacts: [], followUps: [], freq: JSON.par
 let cdata = defaultContacts();
 let contactsReady = false, contactsError = false, unsubscribeContacts = null;
 let ctFilter = 'all', ctQuery = '', ctSelectMode = false, ctPending = null;
-const ctEditOpen = new Set(), ctSelected = new Set();
+const ctEditOpen = new Set(), ctSelected = new Set(), ctGroupOpen = new Set();
 
 function mergeContacts(raw){
   const d = defaultContacts();
@@ -3128,6 +3143,20 @@ function ctBdayDaysAway(md, today){
   return Math.round((parseDate(t) - parseDate(today)) / 86400000);
 }
 
+function ctEditPanel(c){
+  return `<div class="ct-edit">
+        <label class="full ct-lab">Name<input class="td-input" data-f="name" value="${escHtml(c.name)}"></label>
+        <label class="ct-lab">IGN / nickname<input class="td-input" data-f="aka" value="${escHtml(c.aka || '')}"></label>
+        <label class="ct-lab">How I know them<input class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
+        <label class="ct-lab">Type<select class="td-input" data-f="kind"><option value="prospect" ${c.kind === 'prospect' ? 'selected' : ''}>Prospect</option><option value="client" ${c.kind === 'client' ? 'selected' : ''}>Client</option></select></label>
+        <label class="ct-lab">Class<select class="td-input" data-f="cls">${CT_CLASSES.map(x => `<option ${c.cls === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label class="full ct-lab">Birthday (year optional)<input class="td-input" data-f="birthday" value="${escHtml(ctBdayFullLabel(c))}" placeholder="e.g. 14 Mar 1990 (year optional)" style="max-width:180px"></label>
+        <label class="full ct-lab">Important details<textarea class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
+        <label class="full ct-lab">Next message due <input class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
+        <div class="full wr-meta"><button class="quest-action-btn done-btn" data-ct="save" data-id="${c.id}">Save</button><button class="quest-action-btn" data-ct="del" data-id="${c.id}">Delete</button></div>
+      </div>`;
+}
+
 function renderContacts(){
   const dueWrap = document.getElementById('ctDueList'); if(!dueWrap) return;
   const banner = document.getElementById('ctBanner');
@@ -3142,6 +3171,13 @@ function renderContacts(){
   const row = (c, mode) => {
     const lab = ctDueLabel(c.nextDue, today);
     const open = ctEditOpen.has(c.id);
+    if(mode === 'all'){
+      const bchip = c.birthday ? `<span class="td-chip">🎂 ${ctBdayLabel(c.birthday)}</span>` : '';
+      let h2 = `<div class="ct-item compact ${open ? 'open' : ''}"><div class="ct-line">${ctSelectMode ? `<input type="checkbox" class="ct-check" data-sel="${c.id}" ${ctSelected.has(c.id) ? 'checked' : ''}>` : ''}<span class="ct-name">${escHtml(c.name)}</span>${c.aka ? `<span class="ct-sub" style="margin:0">${escHtml(c.aka)}</span>` : ''}<span class="td-chip ${lab.cls}">${lab.text}</span>${bchip}
+        <span class="ct-actions"><button class="quest-action-btn done-btn" data-ct="msg" data-id="${c.id}" title="Messaged">✓</button>${c.kind === 'prospect' ? `<button class="quest-action-btn" data-ct="toclient" data-id="${c.id}" title="They became my client">→ Client</button>` : ''}<button class="quest-action-btn" data-ct="edit" data-id="${c.id}">${open ? '▾' : '✎'}</button></span></div>`;
+      if(open) h2 += ctEditPanel(c);
+      return h2 + '</div>';
+    }
     const sub = [c.aka ? `IGN/nickname: ${escHtml(c.aka)}` : '', c.knownFrom ? escHtml(c.knownFrom) : ''].filter(Boolean).join(' · ');
     let h = `<div class="ct-item">`;
     h += `<div class="ct-top">${ctSelectMode && mode === 'all' ? `<input type="checkbox" class="ct-check" data-sel="${c.id}" ${ctSelected.has(c.id) ? 'checked' : ''}>` : ''}<span class="ct-name">${escHtml(c.name)}</span><span class="ct-class ${c.cls}">${ctKindLabel(c.kind)} ${c.cls}</span></div>`;
@@ -3158,19 +3194,7 @@ function renderContacts(){
       h += `<button class="quest-action-btn" data-ct="toclient" data-id="${c.id}" title="They became my client">→ Client</button>`;
     }
     h += `<button class="quest-action-btn" data-ct="edit" data-id="${c.id}">${open ? '▾' : '✎'}</button></div>`;
-    if(open){
-      h += `<div class="ct-edit">
-        <label class="full ct-lab">Name<input class="td-input" data-f="name" value="${escHtml(c.name)}"></label>
-        <label class="ct-lab">IGN / nickname<input class="td-input" data-f="aka" value="${escHtml(c.aka || '')}"></label>
-        <label class="ct-lab">How I know them<input class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
-        <label class="ct-lab">Type<select class="td-input" data-f="kind"><option value="prospect" ${c.kind === 'prospect' ? 'selected' : ''}>Prospect</option><option value="client" ${c.kind === 'client' ? 'selected' : ''}>Client</option></select></label>
-        <label class="ct-lab">Class<select class="td-input" data-f="cls">${CT_CLASSES.map(x => `<option ${c.cls === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-        <label class="full ct-lab">Birthday (year optional)<input class="td-input" data-f="birthday" value="${escHtml(ctBdayFullLabel(c))}" placeholder="e.g. 14 Mar 1990 (year optional)" style="max-width:180px"></label>
-        <label class="full ct-lab">Important details<textarea class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
-        <label class="full ct-lab">Next message due <input class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
-        <div class="full wr-meta"><button class="quest-action-btn done-btn" data-ct="save" data-id="${c.id}">Save</button><button class="quest-action-btn" data-ct="del" data-id="${c.id}">Delete</button></div>
-      </div>`;
-    }
+    if(open) h += ctEditPanel(c);
     return h + '</div>';
   };
 
@@ -3202,7 +3226,9 @@ function renderContacts(){
     CT_CLASSES.forEach(cl => {
       const g = shown.filter(c => c.kind === k && c.cls === cl).sort((a, b) => a.nextDue < b.nextDue ? -1 : 1);
       if(!g.length) return;
-      h += `<div class="ct-group">${ctKindLabel(k)}s · ${cl} <span style="font-weight:400;color:var(--ink-faint)">· every ${cdata.freq[k][cl]} days · ${g.length}</span></div>` + g.map(c => row(c, 'all')).join('');
+      const key = k + cl;
+      const isOpen = q || ctGroupOpen.has(key);
+      h += `<details class="ct-grp" data-key="${key}" ${isOpen ? 'open' : ''}><summary>${ctKindLabel(k)}s · ${cl} <span style="font-weight:400;color:var(--ink-faint)">· every ${cdata.freq[k][cl]} days · ${g.length}</span></summary><div class="ct-grid">` + g.map(c => row(c, 'all')).join('') + `</div></details>`;
     });
   });
   document.getElementById('ctAllList').innerHTML = h || `<div class="empty-note">${q ? 'No one matches that search.' : 'Nobody here yet.'}</div>`;
@@ -3417,6 +3443,11 @@ function wireContacts(){
     }
     if(saveContacts()){ renderContacts(); renderWaiting(); }
   };
+  document.getElementById('ctAllList').addEventListener('toggle', e => {
+    const d = e.target; if(!d.classList || !d.classList.contains('ct-grp')) return;
+    if(ctQuery.trim()) return;                      // while searching, groups are forced open
+    if(d.open) ctGroupOpen.add(d.dataset.key); else ctGroupOpen.delete(d.dataset.key);
+  }, true);
   document.getElementById('ctDueList').addEventListener('click', onClick);
   document.getElementById('ctBdayList').addEventListener('click', onClick);
   document.getElementById('ctAllList').addEventListener('click', onClick);
