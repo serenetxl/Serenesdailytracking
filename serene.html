@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 22 Oct</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 25 Oct</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -886,7 +886,7 @@
             <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
             <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
             <div id="ctImportPreview"></div>
-            <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name) is skipped. To remove people, tap Select above the list.</div>
+            <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name or same IGN) is skipped. To remove people, tap Select above the list.</div>
           </div>
         </details>
   
@@ -3330,12 +3330,20 @@ function ctRowsToPeople(rows, defKind, defCls){
   });
   return { people, blank };
 }
+// Matching keys for duplicate detection: the name and every IGN/nickname, lowercased,
+// with @, spaces and punctuation ignored (so "Jas Lim", "jas.lim" and "@jaslim" all match).
+function ctKeys(c){
+  const norm = x => String(x || '').toLowerCase().replace(/^@/, '').replace(/[^\p{L}\p{N}]+/gu, '');
+  const out = [norm(c.name)];
+  String(c.aka || '').split(/[\/,;|\n]+/).forEach(a => out.push(norm(a)));
+  return [...new Set(out.filter(Boolean))];
+}
 function ctPreview(rows){
   const defKind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
   const { people, blank } = ctRowsToPeople(rows, defKind, defCls);
-  const have = new Set(cdata.contacts.map(c => c.name.toLowerCase()));
+  const have = new Set(); cdata.contacts.forEach(c => ctKeys(c).forEach(k => have.add(k)));
   const seen = new Set(); const fresh = []; let dup = 0;
-  people.forEach(p => { const k = p.name.toLowerCase(); if(have.has(k) || seen.has(k)){ dup++; return; } seen.add(k); fresh.push(p); });
+  people.forEach(p => { const ks = ctKeys(p); if(ks.some(k => have.has(k) || seen.has(k))){ dup++; return; } ks.forEach(k => seen.add(k)); fresh.push(p); });
   ctPending = fresh;
   const box = document.getElementById('ctImportPreview');
   if(!fresh.length){ box.innerHTML = `<div class="empty-note">Nothing new to import.${dup ? ` ${dup} already on your list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}</div>`; return; }
@@ -3401,7 +3409,7 @@ function wireContacts(){
       let cls = defCls, name = line;
       const m = line.match(/^(.*\S)\s+([ABCDabcd])$/);
       if(m){ name = m[1].trim(); cls = m[2].toUpperCase(); }
-      if(cdata.contacts.some(c => c.name.toLowerCase() === name.toLowerCase())){ skipped++; return; }
+      if(cdata.contacts.some(c => ctKeys(c).some(k => ctKeys({ name }).includes(k)))){ skipped++; return; }
       const c = { id: genId('c'), name, aka: '', knownFrom: '', kind, cls, note: '', lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
       // Several at once: spread them across their cycle so they don't all land on one day.
       if(lines.length > 1) c.nextDue = tdAddDays(today, added % ctFreqDays(c));
