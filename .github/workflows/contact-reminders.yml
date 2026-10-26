@@ -2,7 +2,7 @@ name: 定联 reminders
 
 on:
   schedule:
-    - cron: "0 1 * * *"    # 9:00 am Singapore: today's list
+    - cron: "0 3 * * *"    # 11:00 am Singapore: today's list
     - cron: "0 9 * * *"    # 5:00 pm Singapore: only if still pending
   workflow_dispatch:        # lets you press "Run workflow" to test it
 
