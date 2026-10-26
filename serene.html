@@ -898,7 +898,7 @@
             <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
             <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
             <div id="ctImportPreview"></div>
-            <div class="empty-note" style="padding:6px 0 0">Importing only adds new people. Anyone already on the list (same name or same IGN) is skipped. To remove people, tap Select above the list.</div>
+            <div class="empty-note" style="padding:6px 0 0">Importing adds new people. Anyone already on the list (same name or same IGN) is not duplicated; their blank details (birthday, IGN, notes) get filled in from your file, and nothing already filled in is overwritten. To remove people, tap Select above the list.</div>
           </div>
         </details>
   
@@ -3098,7 +3098,7 @@ const DEFAULT_CT_FREQ = {
 function defaultContacts(){ return { contacts: [], followUps: [], freq: JSON.parse(JSON.stringify(DEFAULT_CT_FREQ)), freqVersion: CT_FREQ_VERSION, updatedAt: 0 }; }
 let cdata = defaultContacts();
 let contactsReady = false, contactsError = false, unsubscribeContacts = null;
-let ctFilter = 'all', ctQuery = '', ctSelectMode = false, ctPending = null;
+let ctFilter = 'all', ctQuery = '', ctSelectMode = false, ctPending = null, ctPendingFill = [];
 const ctEditOpen = new Set(), ctSelected = new Set(), ctGroupOpen = new Set();
 
 function mergeContacts(raw){
@@ -3166,8 +3166,8 @@ function ctParseBdayFull(v){
   const fy = t => { if(!t) return null; let n = +t; if(t.length === 2) n += (n <= nowY % 100 ? 2000 : 1900); return n; };
   if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))){ y = +m[1]; mo = +m[2]; d = +m[3]; }
   else if((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/))){ d = +m[1]; mo = +m[2]; y = fy(m[3]); }   // day first
-  else if((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s*([A-Za-z]{3,})\.?,?\s*(\d{4})?/))){ d = +m[1]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
-  else if((m = s.match(/^([A-Za-z]{3,})\.?\s*(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/))){ d = +m[2]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[1].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
+  else if((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s\-\/.]*([A-Za-z]{3,})\.?[\s\-\/.,]*(\d{2,4})?$/))){ d = +m[1]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
+  else if((m = s.match(/^([A-Za-z]{3,})\.?[\s\-\/.]*(\d{1,2})(?:st|nd|rd|th)?[\s\-\/.,]*(\d{2,4})?$/))){ d = +m[2]; mo = CT_MON.findIndex(x => x.toLowerCase() === m[1].slice(0, 3).toLowerCase()) + 1; y = fy(m[3]); }
   else return null;
   return ctBdayValid(mo, d) ? { md: `${pad(mo)}-${pad(d)}`, year: yr(y) } : null;
 }
@@ -3325,7 +3325,7 @@ const CT_ALIASES = {
   cls: ['class', 'tier', 'grade', 'class a-d', 'class abcd'],
   note: ['important details', 'details', 'notes', 'note', 'remarks', 'about'],
   last: ['last messaged', 'last contacted', 'last contact', 'last message'],
-  bday: ['birthday', 'bday', 'birth date', 'date of birth', 'dob', 'b-day']
+  bday: ['birthday', 'birthdays', 'bday', 'b day', 'b-day', 'birth date', 'birthdate', 'birth day', 'date of birth', 'dob', 'born', 'birth']
 };
 function ctNormHead(s){ return String(s == null ? '' : s).toLowerCase().replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(); }
 function ctParseCsv(text){
@@ -3379,7 +3379,8 @@ function ctRowsToPeople(rows, defKind, defCls){
     if(/^[ABCD]/.test(cv)) cls = cv[0];
     const kv = String(g('kind')).toLowerCase();
     const kind = kv ? (kv.includes('client') ? 'client' : 'prospect') : defKind;
-    people.push({ name, aka: String(g('aka')).trim(), knownFrom: String(g('knownFrom')).trim(), kind, cls, note: String(g('note')).trim(), last: ctToDate(g('last')), bday: (ctParseBdayFull(g('bday')) || {}).md || '', bdayYear: (ctParseBdayFull(g('bday')) || {}).year || null });
+    const bRaw = g('bday'); const bdOk = ctParseBdayFull(bRaw);
+    people.push({ bdayBad: !!(bRaw instanceof Date ? false : String(bRaw).trim()) && !bdOk, bdayRaw: bRaw instanceof Date ? '' : String(bRaw).trim(), name, aka: String(g('aka')).trim(), knownFrom: String(g('knownFrom')).trim(), kind, cls, note: String(g('note')).trim(), last: ctToDate(g('last')), bday: (ctParseBdayFull(g('bday')) || {}).md || '', bdayYear: (ctParseBdayFull(g('bday')) || {}).year || null });
   });
   return { people, blank };
 }
@@ -3419,19 +3420,43 @@ function ctParseLine(line, defKind, defCls){
 function ctPreview(rows){
   const defKind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
   const { people, blank } = ctRowsToPeople(rows, defKind, defCls);
-  const have = new Set(); cdata.contacts.forEach(c => ctKeys(c).forEach(k => have.add(k)));
+  const have = new Map(); cdata.contacts.forEach(c => ctKeys(c).forEach(k => { if(!have.has(k)) have.set(k, c); }));
   const seen = new Set(); const fresh = []; let dup = 0;
-  people.forEach(p => { const ks = ctKeys(p); if(ks.some(k => have.has(k) || seen.has(k))){ dup++; return; } ks.forEach(k => seen.add(k)); fresh.push(p); });
-  ctPending = fresh;
+  const fills = []; let bdFills = 0;
+  people.forEach(p => {
+    const ks = ctKeys(p);
+    const hit = ks.map(k => have.get(k)).find(Boolean);
+    if(hit || ks.some(k => seen.has(k))){
+      dup++;
+      if(hit){   // fill in what's blank on the existing person; never overwrite what's there
+        const patch = {};
+        if(!hit.aka && p.aka) patch.aka = p.aka;
+        if(!hit.knownFrom && p.knownFrom) patch.knownFrom = p.knownFrom;
+        if(!hit.note && p.note) patch.note = p.note;
+        if(!hit.birthday && p.bday){ patch.birthday = p.bday; if(p.bdayYear) patch.birthYear = p.bdayYear; bdFills++; }
+        else if(hit.birthday && !hit.birthYear && p.bday === hit.birthday && p.bdayYear) patch.birthYear = p.bdayYear;
+        if(Object.keys(patch).length) fills.push({ c: hit, patch });
+      }
+      return;
+    }
+    ks.forEach(k => seen.add(k)); fresh.push(p);
+  });
+  ctPending = fresh; ctPendingFill = fills;
+  const badB = people.filter(p => p.bdayBad);
   const box = document.getElementById('ctImportPreview');
-  if(!fresh.length){ box.innerHTML = `<div class="empty-note">Nothing new to import.${dup ? ` ${dup} already on your list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}</div>`; return; }
+  const warn = badB.length ? `<div class="empty-note" style="padding:4px 0;color:var(--red)">${badB.length} birthday${badB.length > 1 ? 's' : ''} couldn't be read, e.g. ${badB.slice(0, 3).map(p => escHtml(p.name) + ': "' + escHtml(p.bdayRaw) + '"').join(', ')}. Use a format like 14 Mar 1990 or 14/03/1990.</div>` : '';
+  if(!fresh.length && !fills.length){ box.innerHTML = `<div class="empty-note">Nothing new to import.${dup ? ` ${dup} already on your list, with nothing new to add to them.` : ''}${blank ? ` ${blank} rows had no name.` : ''}</div>${warn}`; return; }
   const np = fresh.filter(p => p.kind === 'prospect').length, nc = fresh.length - np;
   const sample = fresh.slice(0, 5).map(p => `${escHtml(p.name)} (${ctKindLabel(p.kind)} ${p.cls})`).join(', ');
-  box.innerHTML = `<div class="empty-note" style="padding:8px 0">Ready to import <b>${fresh.length}</b> people: ${np} prospects, ${nc} clients.${dup ? ` Skipping ${dup} already on the list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}<br>e.g. ${sample}${fresh.length > 5 ? '…' : ''}</div>
-    <button class="edit-btn" id="ctImportGo">Import ${fresh.length}</button> <button class="quest-action-btn" id="ctImportCancel">Cancel</button>`;
+  const label = fresh.length && fills.length ? `Import ${fresh.length} + fill ${fills.length}` : fresh.length ? `Import ${fresh.length}` : `Fill in ${fills.length}`;
+  box.innerHTML = `<div class="empty-note" style="padding:8px 0">${fresh.length ? `Ready to import <b>${fresh.length}</b> new people: ${np} prospects, ${nc} clients.` : 'No new people.'}${fills.length ? ` Will also fill in blank details for <b>${fills.length}</b> people already on your list${bdFills ? ` (${bdFills} birthdays)` : ''}. Nothing already filled in is overwritten.` : ''}${dup && !fills.length ? ` Skipping ${dup} already on the list.` : ''}${blank ? ` ${blank} rows had no name.` : ''}${fresh.length ? `<br>e.g. ${sample}${fresh.length > 5 ? '…' : ''}` : ''}</div>${warn}
+    <button class="edit-btn" id="ctImportGo">${label}</button> <button class="quest-action-btn" id="ctImportCancel">Cancel</button>`;
 }
 function ctDoImport(){
-  if(!ctPending || !ctPending.length) return;
+  if((!ctPending || !ctPending.length) && !(ctPendingFill && ctPendingFill.length)) return;
+  ctPending = ctPending || [];
+  const filled = (ctPendingFill || []).map(f => ({ c: f.c, before: Object.fromEntries(Object.keys(f.patch).map(k => [k, f.c[k]])), patch: f.patch }));
+  filled.forEach(f => Object.assign(f.c, f.patch));
   const today = logicalToday(); let spread = 0;
   ctPending.forEach(p => {
     const c = { id: genId('c'), name: p.name, aka: p.aka, knownFrom: p.knownFrom, kind: p.kind, cls: p.cls, note: p.note, birthday: p.bday || '', birthYear: p.bdayYear || null, lastContact: p.last || null, nextDue: today, msgCount: 0, createdAt: today };
@@ -3440,10 +3465,10 @@ function ctDoImport(){
     cdata.contacts.push(c);
   });
   const n = ctPending.length;
-  if(!saveContacts()){ cdata.contacts.length -= n; return; }
-  ctPending = null; document.getElementById('ctImportPreview').innerHTML = '';
+  if(!saveContacts()){ cdata.contacts.length -= n; filled.forEach(f => Object.assign(f.c, f.before)); return; }
+  ctPending = null; ctPendingFill = []; document.getElementById('ctImportPreview').innerHTML = '';
   document.getElementById('ctPaste').value = '';
-  renderContacts(); showToast(`Imported ${n} people`);
+  renderContacts(); showToast(`${n ? 'Imported ' + n + ' people' : ''}${n && filled.length ? ', ' : ''}${filled.length ? 'filled in ' + filled.length : ''}`);
 }
 function ctDownload(name, text){
   const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
@@ -3611,7 +3636,7 @@ function wireContacts(){
   });
   document.getElementById('ctImportPreview').addEventListener('click', e => {
     if(e.target.id === 'ctImportGo') ctDoImport();
-    if(e.target.id === 'ctImportCancel'){ ctPending = null; e.currentTarget.innerHTML = ''; }
+    if(e.target.id === 'ctImportCancel'){ ctPending = null; ctPendingFill = []; e.currentTarget.innerHTML = ''; }
   });
 }
 
