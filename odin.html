@@ -248,7 +248,7 @@ window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit, serverTimestamp,
-  pingOdin, changeOwnPassword, computeMultiplier, computeWeeklyStreakWeeks, reconcileWeekHistory, POINT_VALUES, goalProgress
+  pingOdin, changeOwnPassword, computeMultiplier, computeRollingStreak, reconcileWeekHistory, POINT_VALUES, goalProgress
 } from "./shared.js";
 
 const { auth, db } = initFirebase();
@@ -562,7 +562,8 @@ function renderRewardsManage(){
   const wrap = document.getElementById('rewardsManageWrap');
   const items = state.rewardItems || [];
   if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
-  const weeksUnbroken = computeWeeklyStreakWeeks(reconcileWeekHistory(state.weekHistory || [], state.dayHistory || []));
+  const weeksUnbroken = computeRollingStreak({ dayHistory: state.dayHistory || [],
+    weekHistory: reconcileWeekHistory(state.weekHistory || [], state.dayHistory || []), todayStr: logicalToday() }).weeks;
   wrap.innerHTML = items.map(item => {
     const unlimited = item.maxQty >= 9999;
     let stockLabel;

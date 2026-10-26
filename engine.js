@@ -424,6 +424,38 @@ export function payWeeklyPoints(weekHistory, points, payFrom) {
   return { weekHistory: out, points: p, events };
 }
 
+// ---- Rolling streak weeks ---------------------------------------------------
+// The streak is counted in blocks of 7 days in a row, starting from the first day
+// of the current run of cleared dailies (all quests, or a Streak Keeper), not Mon-Sun.
+// The weekly targets (appointments, exercise) are still judged on calendar Mon-Sun
+// weeks: if a Mon-Sun week that overlaps the run finishes without both targets
+// hit, the weekly count resets to 0 and the next block starts the Monday after.
+// A missed daily ends the run, and the next run starts fresh.
+export function dayClearsBar(d) {
+  return !!d && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
+}
+
+// weekHistory must already be reconciled (reconcileWeekHistory) so exercise is current.
+export function computeRollingStreak({ dayHistory, weekHistory, todayStr }) {
+  const byDate = new Map((dayHistory || []).map(d => [d.date, d]));
+  const yesterday = addDaysStr(todayStr, -1);
+  let runLen = 0;
+  for (let dt = yesterday; dayClearsBar(byDate.get(dt)); dt = addDaysStr(dt, -1)) runLen++;
+  const runStart = runLen ? addDaysStr(yesterday, -(runLen - 1)) : todayStr;
+  let anchor = runStart;
+  let lastMiss = null;
+  for (const w of (weekHistory || [])) {
+    const wEnd = w.weekEnd || addDaysStr(w.weekStart, 6);
+    if (wEnd >= runStart && wEnd <= yesterday && !w.metAllTargets) {
+      const a = addDaysStr(wEnd, 1);
+      if (a > anchor) { anchor = a; lastMiss = w.weekStart; }
+    }
+  }
+  let span = 0;
+  if (anchor <= yesterday) { for (let dt = anchor; dt <= yesterday; dt = addDaysStr(dt, 1)) span++; }
+  return { weeks: Math.floor(span / 7), runLen, runStart, anchor, span, day: (span % 7) + 1, lastMissedWeek: lastMiss };
+}
+
 export function computeWeeklyStreakWeeks(weekHistory) {
   let n = 0, prev = null;
   for (const w of (weekHistory || [])) {
@@ -442,7 +474,7 @@ export function computeWeeklyStreakWeeks(weekHistory) {
  * reconciled against dayHistory (see reconcileWeekHistory).
  */
 export function refreshConditionalRewards(rewardItems, weekHistory, now = new Date()) {
-  const weeksUnbroken = computeWeeklyStreakWeeks(weekHistory);
+  const weeksUnbroken = typeof weekHistory === "number" ? weekHistory : computeWeeklyStreakWeeks(weekHistory);
   return rewardItems.map(item => {
     if (!item.requiresWeeklyStreak) return item;
     const cooldownOk = !item.lastRefreshed || monthsBetween(new Date(item.lastRefreshed), now) >= (item.cooldownMonths || 0);

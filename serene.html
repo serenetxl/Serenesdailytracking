@@ -730,6 +730,7 @@
       <div class="card-head">
         <div class="card-title"><span class="icon">◈</span>Weekly Stats</div>
       </div>
+      <div class="empty-note" id="rollingLine" style="padding:8px 0 10px;line-height:1.5"></div>
       <div class="stat-grid" id="statGrid"></div>
     </div>
 
@@ -1012,7 +1013,7 @@ import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
   settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, payWeeklyPoints, computeWeeklyStreakWeeks,
-  reconcileWeekHistory, evaluateWeek, exerciseApprovedCount,
+  reconcileWeekHistory, evaluateWeek, exerciseApprovedCount, computeRollingStreak, dayClearsBar,
   goalProgress, parseTiers, LEAGUE_CHALLENGE_GOAL,
   logTouchpoint, pingOdin,
   DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
@@ -1240,7 +1241,9 @@ function mergeWithDefaults(parsed){
     points: { ...base.points, ...(parsed.points||{}) },
     rewardItems: refreshConditionalRewards(
       mergeRewardItems(base.rewardItems, parsed.rewardItems),
-      reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
+      computeRollingStreak({ dayHistory: parsed.dayHistory || [],
+        weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
+        todayStr: logicalToday() }).weeks,
       logicalNow()
     ),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
@@ -1281,6 +1284,10 @@ function saveState(){
 // settleDay only pays touchpoint/exercise points for proof Odin had already
 // approved at that moment. Record which ones were paid so that a later
 // approval (from odin.html) pays the rest exactly once.
+// Rolling streak weeks (7 days from when the current run of cleared dailies began).
+function rollingNow(){
+  return computeRollingStreak({ dayHistory: state.dayHistory, weekHistory: state.weekHistory, todayStr: logicalToday() });
+}
 function markProofPointsAwarded(t){
   if(t.touchpoint.logged && t.touchpoint.approved === 'approved') t.touchpoint.pointsAwarded = true;
   if(t.exercise.approved === 'approved') t.exercise.pointsAwarded = true;
@@ -1394,7 +1401,7 @@ async function checkDailyReset(){
 
     state.rewardItems = refreshRewardItems(state.rewardItems, logicalNow());
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, logicalNow());
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
     applyWeeklyPoints();
     state.today = defaultToday(todayStr);
     releaseScheduledQuests();
@@ -1423,7 +1430,7 @@ function checkWeeklyReset(){
       });
     }
     state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
-    state.rewardItems = refreshConditionalRewards(state.rewardItems, state.weekHistory, logicalNow());
+    state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
     applyWeeklyPoints();
     sendWeeklyRecap(w.weekStart);
     state.currentWeek = { weekStart: thisMonday, stats: emptyStats() };
@@ -1436,7 +1443,10 @@ function checkWeeklyReset(){
 function sendWeeklyRecap(weekStart){
   const wk = state.weekHistory.find(x => x.weekStart === weekStart);
   if(!wk) return;
-  const weeks = computeWeeklyStreakWeeks(state.weekHistory);
+  const rs = rollingNow();
+  const weeks = rs.weeks;
+  const dailiesDone = Array.from({ length: 7 }, (_, i) => addDaysLocal(wk.weekStart, i))
+    .filter(dt => dayClearsBar((state.dayHistory || []).find(d => d.date === dt))).length;
   const need = (state.rewardItems.find(r => r.requiresWeeklyStreak) || {}).requiresWeeklyStreak;
   const tg = wk.targets || {};
   const yn = ok => ok ? '✅' : '❌';
@@ -1446,8 +1456,8 @@ function sendWeeklyRecap(weekStart){
     `${yn((wk.stats.exercise||0) >= (tg.exercise||0))} Exercise (approved) ${wk.stats.exercise||0}/${tg.exercise||0}`,
     `• Touchpoints ${wk.stats.followups||0}/${tg.followups||0}`,
     `• FYCC earned $${(wk.stats.fycc||0).toLocaleString('en-SG')} (target $${(tg.fycc||0).toLocaleString('en-SG')})`,
-    `${yn(wk.dailyOk)} Daily agenda cleared all 7 days`,
-    wk.unbroken ? '🔥 Week unbroken.' : '💔 Week not unbroken.',
+    `${yn(dailiesDone === 7)} Daily agenda cleared ${dailiesDone}/7 days`,
+    `🔥 Streak run: ${rs.runLen} day${rs.runLen === 1 ? '' : 's'} in a row`,
     `Weekly streak: ${weeks}${need ? '/' + need : ''} weeks · Daily streak ${state.points.streakDays}d (${state.points.multiplier}x) · ${state.points.total} pts`
   ];
   pingOdin(lines.join('\n'));
@@ -2110,7 +2120,19 @@ function wireTimer(){
 }
 
 /* ---------- Weekly Stats ---------- */
+function renderRollingLine(){
+  const el = document.getElementById('rollingLine'); if(!el) return;
+  const r = rollingNow();
+  const need = (state.rewardItems.find(x => x.requiresWeeklyStreak) || {}).requiresWeeklyStreak;
+  const T = state.weeklyTargets || {};
+  const appts = (state.currentWeek.stats || {}).appointments || 0;
+  const ex = exerciseApprovedCount(state.currentWeek.weekStart, state.today, state.dayHistory);
+  el.innerHTML = `<b>Streak week ${r.weeks + 1}</b> · day ${r.day}/7 · weekly streak ${r.weeks}${need ? '/' + need : ''} · daily run ${r.runLen}d<br>
+    This Mon to Sun: appointments ${appts}/${T.appointments || 0} · exercise ${ex}/${T.exercise || 0}<br>
+    <span style="color:var(--ink-faint)">The 7 days count from when your run of cleared dailies began. Targets are judged Monday to Sunday: if a week ends without both hit, the weekly streak resets.</span>`;
+}
 function renderStats(){
+  renderRollingLine();
   const grid = document.getElementById('statGrid');
   grid.innerHTML = '';
   STAT_DEFS.forEach(def => {
@@ -2302,7 +2324,7 @@ function wireTouchpointExercise(){
 /* ---------- Rewards ---------- */
 function renderRewards(){
   const wrap = document.getElementById('rewardsWrap');
-  const weeksUnbroken = computeWeeklyStreakWeeks(state.weekHistory);
+  const weeksUnbroken = rollingNow().weeks;
   wrap.innerHTML = state.rewardItems.map(item => {
     const unlimited = item.maxQty >= 9999;
     const qtyLabel = unlimited ? '' : ` · qty ${item.qty}/${item.maxQty}`;
@@ -2993,10 +3015,9 @@ function renderHistory(){
         <td>${w.stats.exercise||0}/${(w.targets||{}).exercise||0}</td>
         <td>${w.stats.followups||0}/${(w.targets||{}).followups||0}</td>
         <td>$${(w.stats.fycc||0).toLocaleString('en-SG')}</td>
-        <td>${w.unbroken === undefined ? '—' : (w.unbroken ? '✓' : '✗')}</td>
       </tr>`).join('');
     weekWrap.innerHTML = `<table class="hist-table">
-      <thead><tr><th>Week</th><th>Appts</th><th>Exercise</th><th>Touchpoints</th><th>FYCC</th><th>Unbroken</th></tr></thead>
+      <thead><tr><th>Week</th><th>Appts</th><th>Exercise</th><th>Touchpoints</th><th>FYCC</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
 }
