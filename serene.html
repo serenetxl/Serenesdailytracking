@@ -3329,6 +3329,7 @@ const CT_ALIASES = {
 };
 function ctNormHead(s){ return String(s == null ? '' : s).toLowerCase().replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(); }
 function ctParseCsv(text){
+  text = String(text).replace(/^\ufeff/, '');   // Excel's byte-order mark
   const rows = []; let row = [], cur = '', q = false;
   for(let i = 0; i < text.length; i++){
     const ch = text[i];
