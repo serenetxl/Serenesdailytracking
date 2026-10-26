@@ -1,0 +1,20 @@
+name: Morning news digest
+
+on:
+  schedule:
+    - cron: "0 1 * * *"     # 9:00 am Singapore, every day
+  workflow_dispatch:         # lets you press "Run workflow" to test it
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send news
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node news.mjs
