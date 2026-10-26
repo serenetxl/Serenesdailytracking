@@ -866,6 +866,16 @@
       <div class="td-sort" style="margin-top:10px">
           <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
           <textarea id="ctNames" class="td-input" rows="3" placeholder="One per line. Add a class letter at the end if you like:&#10;Diana A&#10;Kevin&#10;Mei Ling C"></textarea>
+          <details class="ct-details" id="ctAddMore" style="margin:6px 0 2px">
+            <summary>＋ Add details (one person)</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+              <input id="ctAddAka" class="td-input" placeholder="IGN / nickname">
+              <input id="ctAddBday" class="td-input" placeholder="Birthday (e.g. 14 Mar 1990)">
+              <input id="ctAddKnown" class="td-input" style="grid-column:1/-1" placeholder="How I know them">
+              <textarea id="ctAddNote" class="td-input" style="grid-column:1/-1" rows="2" placeholder="Important details"></textarea>
+            </div>
+            <div class="empty-note" style="padding:4px 0 0">Applies when you add one name. For many people with details, use the Excel import.</div>
+          </details>
           <div class="td-row">
             <select id="ctKind" class="td-input" style="width:auto;padding:7px 9px"><option value="prospect">Prospect</option><option value="client">Client</option></select>
             <select id="ctCls" class="td-input" style="width:auto;padding:7px 9px" title="Used when a line has no class"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
@@ -1016,7 +1026,7 @@ import {
   reconcileWeekHistory, evaluateWeek, exerciseApprovedCount, computeRollingStreak, dayClearsBar,
   goalProgress, parseTiers, LEAGUE_CHALLENGE_GOAL,
   logTouchpoint, pingOdin,
-  DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE, uploadProofPhoto
+  DEFAULT_REWARD_ITEMS, DEFAULT_TOUCHPOINT_CHALLENGE
 } from "./shared.js";
 
 const { auth, db, storage } = initFirebase();
@@ -2254,16 +2264,37 @@ function proofNoteText(kind){
   if(o.logged && o.approved !== 'approved') return 'No photo yet. Pick one above and it uploads straight away.';
   return '';
 }
-async function compressForUpload(file){
+// Firebase Storage needs a paid plan, so proof photos are shrunk to a small JPEG
+// and kept in Firestore (collection "proofs"). Odin's page loads them from there.
+async function photoToDataUrl(file){
+  const MAX = 650000;                      // characters; a Firestore doc is capped at ~1 MB
   try{
     const bmp = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
-    return blob ? new File([blob], 'proof.jpg', { type: 'image/jpeg' }) : file;
-  }catch(e){ return file; }   // e.g. a format the browser can't decode: send it as it is
+    let dim = 1100, q = 0.72, out = '';
+    for(let i = 0; i < 8; i++){
+      const scale = Math.min(1, dim / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      out = c.toDataURL('image/jpeg', q);
+      if(out.length <= MAX) return out;
+      dim = Math.round(dim * 0.8); q = Math.max(0.4, q - 0.07);
+    }
+    throw Object.assign(new Error('photo too large'), { code: 'photo-too-large' });
+  }catch(e){
+    if(e && e.code === 'photo-too-large') throw e;
+    // A format the browser can't decode: send it as it is if it is already small.
+    if(file.size * 1.4 <= MAX){
+      return await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(Object.assign(new Error('unreadable'), { code: 'photo-unreadable' })); r.readAsDataURL(file); });
+    }
+    throw Object.assign(new Error('unreadable'), { code: 'photo-unreadable' });
+  }
+}
+async function saveProofPhoto(kind, date, file){
+  const data = await photoToDataUrl(file);
+  const id = `${kind}-${date}`;
+  await setDoc(doc(db, 'proofs', id), { kind, date, data, savedAt: Date.now() });
+  return 'proof:' + id;
 }
 function withTimeout(promise, ms){
   return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timed out'), { code: 'timed-out' })), ms))]);
@@ -2273,8 +2304,7 @@ async function attachProof(kind, file){
   proofNote[kind] = 'Uploading photo… keep this page open';
   renderTouchpointExercise();
   try{
-    const f = await compressForUpload(file);
-    const url = await withTimeout(uploadProofPhoto(storage, kind + '-proof', date, f), 60000);
+    const url = await withTimeout(saveProofPhoto(kind, date, file), 60000);
     if(state.today.date === date && state.today[kind] && state.today[kind].logged){
       state.today[kind].photoUrl = url;
       proofNote[kind] = '';
@@ -3425,6 +3455,7 @@ function wireContacts(){
     const kind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
     const lines = ta.value.split('\n').map(x => x.trim()).filter(Boolean);
     if(!lines.length){ msg('Type a name first'); return; }
+    const detailFilled = ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].some(id => ((document.getElementById(id) || {}).value || '').trim());
     const today = logicalToday(); let added = 0, skipped = 0;
     lines.forEach(line => {
       let cls = defCls, name = line;
@@ -3432,12 +3463,19 @@ function wireContacts(){
       if(m){ name = m[1].trim(); cls = m[2].toUpperCase(); }
       if(cdata.contacts.some(c => ctKeys(c).some(k => ctKeys({ name }).includes(k)))){ skipped++; return; }
       const c = { id: genId('c'), name, aka: '', knownFrom: '', kind, cls, note: '', lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
+      if(lines.length === 1){
+        c.aka = ((document.getElementById('ctAddAka') || {}).value || '').trim();
+        c.knownFrom = ((document.getElementById('ctAddKnown') || {}).value || '').trim();
+        c.note = ((document.getElementById('ctAddNote') || {}).value || '').trim();
+        const bd = ctParseBdayFull(((document.getElementById('ctAddBday') || {}).value || '').trim());
+        if(bd){ c.birthday = bd.md; if(bd.year) c.birthYear = bd.year; }
+      }
       // Several at once: spread them across their cycle so they don't all land on one day.
       if(lines.length > 1) c.nextDue = tdAddDays(today, added % ctFreqDays(c));
       cdata.contacts.push(c); added++;
     });
-    if(added && saveContacts()){ ta.value = ''; renderContacts(); }
-    msg(`${added ? 'Added ' + added : 'Nothing added'}${skipped ? ` (${skipped} already on the list)` : ''}${added > 1 ? '. Spread over their first cycle.' : ''}`);
+    if(added && saveContacts()){ ta.value = ''; ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].forEach(id => { const x = document.getElementById(id); if(x) x.value = ''; }); renderContacts(); }
+    msg(`${added ? 'Added ' + added : 'Nothing added'}${skipped ? ` (${skipped} already on the list)` : ''}${added > 1 ? '. Spread over their first cycle.' : ''}${lines.length > 1 && detailFilled ? ' The detail boxes only apply to one name, so they were not used.' : ''}`);
   });
   document.getElementById('ctFilter').addEventListener('click', e => {
     const b = e.target.closest('button[data-f]'); if(!b) return;

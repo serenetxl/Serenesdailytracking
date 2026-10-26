@@ -340,8 +340,8 @@ function renderApprovals(){
   wrap.innerHTML = items.map(it => `
     <div class="row">
       <span>${it.date} — quests ${it.quests}/3, energy ${it.energy || '—'}<br>
-        touchpoint ${it.touchpoint.logged ? it.touchpoint.approved : '—'}${it.touchpoint.logged ? (it.touchpoint.photoUrl ? ` · <a href="${it.touchpoint.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>') : ''}<br>
-        exercise ${it.exercise.logged ? it.exercise.approved : '—'}${it.exercise.logged ? (it.exercise.photoUrl ? ` · <a href="${it.exercise.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>') : ''}
+        touchpoint ${it.touchpoint.logged ? it.touchpoint.approved : '—'}${it.touchpoint.logged ? (it.touchpoint.photoUrl ? ` · ${proofLink(it.touchpoint.photoUrl)}` : ' · <span style="color:var(--amber)">no photo</span>') : ''}<br>
+        exercise ${it.exercise.logged ? it.exercise.approved : '—'}${it.exercise.logged ? (it.exercise.photoUrl ? ` · ${proofLink(it.exercise.photoUrl)}` : ' · <span style="color:var(--amber)">no photo</span>') : ''}
       </span>
       <span>
         ${it.touchpoint.logged && it.touchpoint.approved === 'pending' ? `<button class="approve" data-tpapprove="${it.date}" data-live="${it.live}">Approve touchpoint</button>` : ''}
@@ -402,6 +402,27 @@ const approveTouchpoint = (dateStr, live) => approveProof('touchpoint', dateStr,
 
 // Everything Serene enters today shows here straight away — no Submit Day needed.
 // (Her journal is in the Journal card below, also live.)
+// Photos made by the new app are stored in Firestore ("proof:<id>"); older ones are plain links.
+function proofLink(url){
+  if(String(url).startsWith('proof:')) return `<a href="#" data-proof="${escapeHtml(String(url).slice(6))}" style="color:var(--blue)">view photo</a>`;
+  return `<a href="${escapeHtml(String(url))}" target="_blank" style="color:var(--blue)">view photo</a>`;
+}
+document.addEventListener('click', async (e) => {
+  const a = e.target.closest && e.target.closest('a[data-proof]'); if(!a) return;
+  e.preventDefault();
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;color:#fff;font-size:14px';
+  ov.textContent = 'Loading photo…';
+  ov.addEventListener('click', () => ov.remove());
+  document.body.appendChild(ov);
+  try{
+    const snap = await getDoc(doc(db, 'proofs', a.dataset.proof));
+    if(!snap.exists()){ ov.textContent = 'Photo not found. Tap to close.'; return; }
+    const img = document.createElement('img');
+    img.src = snap.data().data; img.style.cssText = 'max-width:100%;max-height:100%;border-radius:8px';
+    ov.textContent = ''; ov.appendChild(img);
+  }catch(err){ ov.textContent = 'Could not load photo (' + (err.code || err.message) + '). Tap to close.'; }
+});
 function renderLive(){
   const wrap = document.getElementById('liveWrap');
   const t = state.today;
@@ -412,7 +433,7 @@ function renderLive(){
   }).join('');
   const proof = (label, kind, obj) => {
     if(!obj || !obj.logged) return `<div>${label}: —</div>`;
-    const photo = obj.photoUrl ? ` · <a href="${obj.photoUrl}" target="_blank" style="color:var(--blue)">view photo</a>` : ' · <span style="color:var(--amber)">no photo</span>';
+    const photo = obj.photoUrl ? ` · ${proofLink(obj.photoUrl)}` : ' · <span style="color:var(--amber)">no photo</span>';
     const btn = obj.approved === 'pending' ? ` <button class="approve" data-live-${kind}="1">Approve ${label.toLowerCase()}</button>` : '';
     return `<div>${label}: ${obj.approved}${photo}${btn}</div>`;
   };
