@@ -651,6 +651,38 @@
       <div id="fycGoalsList"></div>
     </div>
 
+    <!-- Morning Dailies Focus Timer -->
+    <div class="card timer-card">
+      <div class="timer-label" id="timerLabel">MORNING DAILIES</div>
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="timer-flow">check → triage → choose → execute · 25 min · 10 min break · 25 min</div>
+      <div class="timer-controls">
+        <button class="timer-btn primary" id="timerStartBtn">Start</button>
+        <button class="timer-btn primary" id="timerPauseBtn" style="display:none;">Pause</button>
+        <button class="timer-btn primary" id="timerResumeBtn" style="display:none;">Resume</button>
+        <button class="timer-btn" id="timerResetBtn" style="display:none;">Reset</button>
+      </div>
+      <div class="timer-banner" id="timerBanner" style="display:none;">
+        <span id="timerBannerText"></span>
+        <button class="banner-dismiss" id="timerBannerDismiss">✕</button>
+      </div>
+      <div class="main-quest-prompt" id="mainQuestPrompt" style="display:none;">
+        <div class="mqp-label">Your Main Quest</div>
+        <div class="mqp-text" id="mqpText"></div>
+        <button class="timer-btn primary" id="startMainQuestBtn">START MAIN QUEST</button>
+      </div>
+    </div>
+
+    <!-- Work Dailies -->
+    <div class="card">
+      <div class="card-head daily-header-row">
+        <div class="card-title"><span class="icon">▸</span>Work Dailies</div>
+        <div class="daily-count" id="dailyCount">0 / 8</div>
+      </div>
+      <div class="bar-track" style="margin-bottom:12px;"><div class="bar-fill thin" id="dailyBar" style="width:0%; background: var(--teal); box-shadow:none;"></div></div>
+      <div id="dailyList"></div>
+    </div>
+
     <!-- Unfinished from yesterday -->
     <div class="card" id="unfinishedCard" style="display:none;">
       <div class="card-head">
@@ -691,38 +723,6 @@
       </div>
 
       <div id="todoList"></div>
-    </div>
-
-    <!-- Morning Dailies Focus Timer -->
-    <div class="card timer-card">
-      <div class="timer-label" id="timerLabel">MORNING DAILIES</div>
-      <div class="timer-display" id="timerDisplay">25:00</div>
-      <div class="timer-flow">check → triage → choose → execute · 25 min · 10 min break · 25 min</div>
-      <div class="timer-controls">
-        <button class="timer-btn primary" id="timerStartBtn">Start</button>
-        <button class="timer-btn primary" id="timerPauseBtn" style="display:none;">Pause</button>
-        <button class="timer-btn primary" id="timerResumeBtn" style="display:none;">Resume</button>
-        <button class="timer-btn" id="timerResetBtn" style="display:none;">Reset</button>
-      </div>
-      <div class="timer-banner" id="timerBanner" style="display:none;">
-        <span id="timerBannerText"></span>
-        <button class="banner-dismiss" id="timerBannerDismiss">✕</button>
-      </div>
-      <div class="main-quest-prompt" id="mainQuestPrompt" style="display:none;">
-        <div class="mqp-label">Your Main Quest</div>
-        <div class="mqp-text" id="mqpText"></div>
-        <button class="timer-btn primary" id="startMainQuestBtn">START MAIN QUEST</button>
-      </div>
-    </div>
-
-    <!-- Work Dailies -->
-    <div class="card">
-      <div class="card-head daily-header-row">
-        <div class="card-title"><span class="icon">▸</span>Work Dailies</div>
-        <div class="daily-count" id="dailyCount">0 / 8</div>
-      </div>
-      <div class="bar-track" style="margin-bottom:12px;"><div class="bar-fill thin" id="dailyBar" style="width:0%; background: var(--teal); box-shadow:none;"></div></div>
-      <div id="dailyList"></div>
     </div>
 
     <!-- Weekly Stats -->
@@ -843,8 +843,8 @@
         <button data-dir="owe">I owe them a reply</button>
       </div>
       <div class="wr-add">
-        <input id="wrName" class="td-input" type="text" placeholder="Who? e.g. Diana">
-        <input id="wrAbout" class="td-input" type="text" placeholder="About? e.g. confirm Fri 3pm meeting">
+        <input autocomplete="off" id="wrName" class="td-input" type="text" placeholder="Who? e.g. Diana">
+        <input autocomplete="off" id="wrAbout" class="td-input" type="text" placeholder="About? e.g. confirm Fri 3pm meeting">
         <div class="wr-row2 full">
           <label style="font-size:12px;color:var(--ink-faint)">Check back in
             <select id="wrDays" class="td-input" style="width:auto;display:inline-block;padding:7px 9px">
@@ -865,15 +865,15 @@
         <summary>＋ Add people · import · settings</summary>
       <div class="td-sort" style="margin-top:10px">
           <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
-          <textarea id="ctNames" class="td-input" rows="3" placeholder="One person per line, separated by commas:&#10;Name, IGN, how I know them, details, birthday, class&#10;Shan Min, d_momentzar, IG follower, likes hiking, 14 Mar 1990, B&#10;Kevin&#10;Mei Ling C"></textarea>
+          <textarea autocomplete="off" id="ctNames" class="td-input" rows="3" placeholder="One person per line, separated by commas:&#10;Name, IGN, how I know them, details, birthday, class&#10;Shan Min, d_momentzar, IG follower, likes hiking, 14 Mar 1990, B&#10;Kevin&#10;Mei Ling C"></textarea>
           <div class="empty-note" id="ctAddPreview" style="padding:4px 0 0;line-height:1.5"></div>
           <details class="ct-details" id="ctAddMore" style="margin:6px 0 2px">
             <summary>＋ Add details (one person)</summary>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
-              <input id="ctAddAka" class="td-input" placeholder="IGN / nickname">
-              <input id="ctAddBday" class="td-input" placeholder="Birthday (e.g. 14 Mar 1990)">
-              <input id="ctAddKnown" class="td-input" style="grid-column:1/-1" placeholder="How I know them">
-              <textarea id="ctAddNote" class="td-input" style="grid-column:1/-1" rows="2" placeholder="Important details"></textarea>
+              <input autocomplete="off" id="ctAddAka" class="td-input" placeholder="IGN / nickname">
+              <input autocomplete="off" id="ctAddBday" class="td-input" placeholder="Birthday (e.g. 14 Mar 1990)">
+              <input autocomplete="off" id="ctAddKnown" class="td-input" style="grid-column:1/-1" placeholder="How I know them">
+              <textarea autocomplete="off" id="ctAddNote" class="td-input" style="grid-column:1/-1" rows="2" placeholder="Important details"></textarea>
             </div>
             <div class="empty-note" style="padding:4px 0 0">Applies when you add one name. For many people with details, use the Excel import.</div>
           </details>
@@ -895,7 +895,7 @@
               <input type="file" id="ctFile" accept=".xlsx,.xls,.csv,.txt">
               <button class="quest-action-btn" id="ctExportBtn">Download my list</button>
             </div>
-            <textarea id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
+            <textarea autocomplete="off" id="ctPaste" class="td-input" rows="3" style="margin-top:8px" placeholder="Or copy rows from Excel (include the header row) and paste here"></textarea>
             <div class="td-row"><button class="quest-action-btn" id="ctParseBtn">Read pasted rows</button></div>
             <div id="ctImportPreview"></div>
             <div class="empty-note" style="padding:6px 0 0">Importing adds new people. Anyone already on the list (same name or same IGN) is not duplicated; their blank details (birthday, IGN, notes) get filled in from your file, and nothing already filled in is overwritten. To remove people, tap Select above the list.</div>
@@ -930,7 +930,7 @@
         <button data-f="client">Clients</button>
         <button id="ctSelectBtn" style="margin-left:auto">Select</button>
       </div>
-      <input id="ctSearch" class="td-input" type="search" placeholder="Search name, IGN, details" style="margin-bottom:6px">
+      <input autocomplete="off" id="ctSearch" class="td-input" type="search" placeholder="Search name, IGN, details" style="margin-bottom:6px">
       <div id="ctBulkBar" class="wr-meta" style="display:none;margin:6px 0 4px"></div>
       <div id="ctAllList"></div>
     </div>
@@ -3197,14 +3197,14 @@ function ctBdayDaysAway(md, today){
 
 function ctEditPanel(c){
   return `<div class="ct-edit">
-        <label class="full ct-lab">Name<input class="td-input" data-f="name" value="${escHtml(c.name)}"></label>
-        <label class="ct-lab">IGN / nickname<input class="td-input" data-f="aka" value="${escHtml(c.aka || '')}"></label>
-        <label class="ct-lab">How I know them<input class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
+        <label class="full ct-lab">Name<input autocomplete="off" class="td-input" data-f="name" value="${escHtml(c.name)}"></label>
+        <label class="ct-lab">IGN / nickname<input autocomplete="off" class="td-input" data-f="aka" value="${escHtml(c.aka || '')}"></label>
+        <label class="ct-lab">How I know them<input autocomplete="off" class="td-input" data-f="knownFrom" value="${escHtml(c.knownFrom || '')}" placeholder="e.g. guild, ex-colleague"></label>
         <label class="ct-lab">Type<select class="td-input" data-f="kind"><option value="prospect" ${c.kind === 'prospect' ? 'selected' : ''}>Prospect</option><option value="client" ${c.kind === 'client' ? 'selected' : ''}>Client</option></select></label>
         <label class="ct-lab">Class<select class="td-input" data-f="cls">${CT_CLASSES.map(x => `<option ${c.cls === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-        <label class="full ct-lab">Birthday (year optional)<input class="td-input" data-f="birthday" value="${escHtml(ctBdayFullLabel(c))}" placeholder="e.g. 14 Mar 1990 (year optional)" style="max-width:180px"></label>
-        <label class="full ct-lab">Important details<textarea class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
-        <label class="full ct-lab">Next message due <input class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
+        <label class="full ct-lab">Birthday (year optional)<input autocomplete="off" class="td-input" data-f="birthday" value="${escHtml(ctBdayFullLabel(c))}" placeholder="e.g. 14 Mar 1990 (year optional)" style="max-width:180px"></label>
+        <label class="full ct-lab">Important details<textarea autocomplete="off" class="td-input" rows="3" data-f="note" placeholder="Family, birthday, what they care about, last topic we chatted about…">${escHtml(c.note || '')}</textarea></label>
+        <label class="full ct-lab">Next message due <input autocomplete="off" class="td-input" type="date" data-f="nextDue" value="${c.nextDue}" style="width:auto;display:inline-block;padding:5px 8px"></label>
         <div class="full wr-meta"><button class="quest-action-btn done-btn" data-ct="save" data-id="${c.id}">Save</button><button class="quest-action-btn" data-ct="del" data-id="${c.id}">Delete</button></div>
       </div>`;
 }
@@ -3520,7 +3520,7 @@ function wireContacts(){
     const kind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
     const lines = ta.value.split('\n').map(x => x.trim()).filter(Boolean);
     if(!lines.length){ msg('Type a name first'); return; }
-    const detailFilled = ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].some(id => ((document.getElementById(id) || {}).value || '').trim());
+    const detailFilled = !!(document.getElementById('ctAddMore') || {}).open && ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].some(id => ((document.getElementById(id) || {}).value || '').trim());
     const today = logicalToday(); let added = 0, skipped = 0;
     lines.forEach(line => {
       const pl = ctParseLine(line, kind, defCls);
@@ -3529,7 +3529,7 @@ function wireContacts(){
       if(cdata.contacts.some(c => ctKeys(c).some(k => ctKeys(pl).includes(k)))){ skipped++; return; }
       const c = { id: genId('c'), name, aka: pl.aka, knownFrom: pl.knownFrom, kind: pl.kind, cls, note: pl.note, lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
       if(pl.bday){ c.birthday = pl.bday.md; if(pl.bday.year) c.birthYear = pl.bday.year; }
-      if(lines.length === 1){
+      if(lines.length === 1 && (document.getElementById('ctAddMore') || {}).open){   // only when the details section is open, so hidden leftovers never get in
         const v = id => ((document.getElementById(id) || {}).value || '').trim();
         if(v('ctAddAka')) c.aka = v('ctAddAka');
         if(v('ctAddKnown')) c.knownFrom = v('ctAddKnown');
@@ -3541,7 +3541,8 @@ function wireContacts(){
       if(lines.length > 1) c.nextDue = tdAddDays(today, added % ctFreqDays(c));
       cdata.contacts.push(c); added++;
     });
-    if(added && saveContacts()){ ta.value = ''; showPreview(); ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].forEach(id => { const x = document.getElementById(id); if(x) x.value = ''; }); renderContacts(); }
+    if(added && saveContacts()){ ta.value = ''; showPreview(); renderContacts(); }
+    if(added){ ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].forEach(id => { const x = document.getElementById(id); if(x) x.value = ''; }); }
     msg(`${added ? 'Added ' + added : 'Nothing added'}${skipped ? ` (${skipped} already on the list)` : ''}${added > 1 ? '. Spread over their first cycle.' : ''}${lines.length > 1 && detailFilled ? ' The detail boxes only apply to one name, so they were not used.' : ''}`);
   });
   document.getElementById('ctFilter').addEventListener('click', e => {
