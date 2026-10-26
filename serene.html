@@ -865,7 +865,8 @@
         <summary>＋ Add people · import · settings</summary>
       <div class="td-sort" style="margin-top:10px">
           <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">Add people</div>
-          <textarea id="ctNames" class="td-input" rows="3" placeholder="One per line. Add a class letter at the end if you like:&#10;Diana A&#10;Kevin&#10;Mei Ling C"></textarea>
+          <textarea id="ctNames" class="td-input" rows="3" placeholder="One person per line, separated by commas:&#10;Name, IGN, how I know them, details, birthday, class&#10;Shan Min, d_momentzar, IG follower, likes hiking, 14 Mar 1990, B&#10;Kevin&#10;Mei Ling C"></textarea>
+          <div class="empty-note" id="ctAddPreview" style="padding:4px 0 0;line-height:1.5"></div>
           <details class="ct-details" id="ctAddMore" style="margin:6px 0 2px">
             <summary>＋ Add details (one person)</summary>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
@@ -3389,6 +3390,31 @@ function ctKeys(c){
   String(c.aka || '').split(/[\/,;|\n]+/).forEach(a => out.push(norm(a)));
   return [...new Set(out.filter(Boolean))];
 }
+// One line = one person, comma separated: Name, IGN, How I know them, Details ...
+// Birthday, class (A-D) and Prospect/Client are spotted wherever they are in the line.
+function ctParseLine(line, defKind, defCls){
+  const parts = line.split(/\s*[,，;；]\s*/).map(x => x.trim()).filter(Boolean);
+  const out = { name: '', aka: '', knownFrom: '', note: '', kind: defKind, cls: defCls, bday: null };
+  if(!parts.length) return out;
+  let nm = parts.shift();
+  const m = nm.match(/^(.*\S)\s+([ABCDabcd])$/);           // "Diana A"
+  if(m){ nm = m[1].trim(); out.cls = m[2].toUpperCase(); }
+  out.name = nm;
+  const rest = [];
+  parts.forEach(p => {
+    if(/^(client|prospect)s?$/i.test(p)){ out.kind = /client/i.test(p) ? 'client' : 'prospect'; return; }
+    const cm = p.match(/^(?:class\s*|tier\s*)?([ABCDabcd])$/i);
+    if(cm){ out.cls = cm[1].toUpperCase(); return; }
+    const bd = !out.bday && ctParseBdayFull(p);
+    if(bd){ out.bday = bd; return; }
+    rest.push(p);
+  });
+  // Next single word = IGN; then how I know them; anything after = important details.
+  if(rest.length && !/\s/.test(rest[0])) out.aka = rest.shift().replace(/^@/, '');
+  if(rest.length) out.knownFrom = rest.shift();
+  if(rest.length) out.note = rest.join('; ');
+  return out;
+}
 function ctPreview(rows){
   const defKind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
   const { people, blank } = ctRowsToPeople(rows, defKind, defCls);
@@ -3450,6 +3476,19 @@ async function ctReadFile(file){
 function wireContacts(){
   const addBtn = document.getElementById('ctAddBtn'); if(!addBtn) return;
   const msg = t => { const el = document.getElementById('ctAddMsg'); el.textContent = t; setTimeout(() => { if(el.textContent === t) el.textContent = ''; }, 4000); };
+  const prevEl = document.getElementById('ctAddPreview');
+  const showPreview = () => {
+    const lines = document.getElementById('ctNames').value.split('\n').map(x => x.trim()).filter(Boolean);
+    const kind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
+    const bits = lines.slice(0, 4).map(l => {
+      const p = ctParseLine(l, kind, defCls);
+      const b = p.bday ? ctBdayLabel(p.bday.md) + (p.bday.year ? ' ' + p.bday.year : '') : '';
+      return [p.name, p.aka && 'IGN ' + p.aka, p.knownFrom && 'know: ' + p.knownFrom, p.note && 'details: ' + p.note, b && 'bday ' + b, (p.kind === 'client' ? 'Client' : 'Prospect') + ' ' + p.cls].filter(Boolean).join(' · ');
+    });
+    prevEl.style.whiteSpace = 'pre-line';
+    prevEl.textContent = lines.length ? 'Will add:\n' + bits.join('\n') + (lines.length > 4 ? `\n…and ${lines.length - 4} more` : '') : '';
+  };
+  ['ctNames', 'ctKind', 'ctCls'].forEach(id => document.getElementById(id).addEventListener('input', showPreview));
   addBtn.addEventListener('click', () => {
     const ta = document.getElementById('ctNames');
     const kind = document.getElementById('ctKind').value, defCls = document.getElementById('ctCls').value;
@@ -3458,23 +3497,25 @@ function wireContacts(){
     const detailFilled = ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].some(id => ((document.getElementById(id) || {}).value || '').trim());
     const today = logicalToday(); let added = 0, skipped = 0;
     lines.forEach(line => {
-      let cls = defCls, name = line;
-      const m = line.match(/^(.*\S)\s+([ABCDabcd])$/);
-      if(m){ name = m[1].trim(); cls = m[2].toUpperCase(); }
-      if(cdata.contacts.some(c => ctKeys(c).some(k => ctKeys({ name }).includes(k)))){ skipped++; return; }
-      const c = { id: genId('c'), name, aka: '', knownFrom: '', kind, cls, note: '', lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
+      const pl = ctParseLine(line, kind, defCls);
+      const name = pl.name, cls = pl.cls;
+      if(!name){ return; }
+      if(cdata.contacts.some(c => ctKeys(c).some(k => ctKeys(pl).includes(k)))){ skipped++; return; }
+      const c = { id: genId('c'), name, aka: pl.aka, knownFrom: pl.knownFrom, kind: pl.kind, cls, note: pl.note, lastContact: null, nextDue: today, msgCount: 0, createdAt: today };
+      if(pl.bday){ c.birthday = pl.bday.md; if(pl.bday.year) c.birthYear = pl.bday.year; }
       if(lines.length === 1){
-        c.aka = ((document.getElementById('ctAddAka') || {}).value || '').trim();
-        c.knownFrom = ((document.getElementById('ctAddKnown') || {}).value || '').trim();
-        c.note = ((document.getElementById('ctAddNote') || {}).value || '').trim();
-        const bd = ctParseBdayFull(((document.getElementById('ctAddBday') || {}).value || '').trim());
+        const v = id => ((document.getElementById(id) || {}).value || '').trim();
+        if(v('ctAddAka')) c.aka = v('ctAddAka');
+        if(v('ctAddKnown')) c.knownFrom = v('ctAddKnown');
+        if(v('ctAddNote')) c.note = v('ctAddNote');
+        const bd = ctParseBdayFull(v('ctAddBday'));
         if(bd){ c.birthday = bd.md; if(bd.year) c.birthYear = bd.year; }
       }
       // Several at once: spread them across their cycle so they don't all land on one day.
       if(lines.length > 1) c.nextDue = tdAddDays(today, added % ctFreqDays(c));
       cdata.contacts.push(c); added++;
     });
-    if(added && saveContacts()){ ta.value = ''; ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].forEach(id => { const x = document.getElementById(id); if(x) x.value = ''; }); renderContacts(); }
+    if(added && saveContacts()){ ta.value = ''; showPreview(); ['ctAddAka','ctAddKnown','ctAddNote','ctAddBday'].forEach(id => { const x = document.getElementById(id); if(x) x.value = ''; }); renderContacts(); }
     msg(`${added ? 'Added ' + added : 'Nothing added'}${skipped ? ` (${skipped} already on the list)` : ''}${added > 1 ? '. Spread over their first cycle.' : ''}${lines.length > 1 && detailFilled ? ' The detail boxes only apply to one name, so they were not used.' : ''}`);
   });
   document.getElementById('ctFilter').addEventListener('click', e => {
