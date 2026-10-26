@@ -1,0 +1,21 @@
+name: Weekly backup to Telegram
+
+on:
+  schedule:
+    - cron: "0 14 * * 0"    # Sunday 10:00 pm Singapore
+  workflow_dispatch:         # lets you press "Run workflow" to test it
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send backup
+        env:
+          FIREBASE_PASSWORD: ${{ secrets.FIREBASE_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node backup.mjs
