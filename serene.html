@@ -3394,7 +3394,7 @@ function ctKeys(c){
 // One line = one person, comma separated: Name, IGN, How I know them, Details ...
 // Birthday, class (A-D) and Prospect/Client are spotted wherever they are in the line.
 function ctParseLine(line, defKind, defCls){
-  const parts = line.split(/\s*[,，;；]\s*/).map(x => x.trim()).filter(Boolean);
+  const parts = line.split(/\s*[,，]\s*/).map(x => x.trim()).filter(Boolean);
   const out = { name: '', aka: '', knownFrom: '', note: '', kind: defKind, cls: defCls, bday: null };
   if(!parts.length) return out;
   let nm = parts.shift();
@@ -3413,7 +3413,7 @@ function ctParseLine(line, defKind, defCls){
   // Next single word = IGN; then how I know them; anything after = important details.
   if(rest.length && !/\s/.test(rest[0])) out.aka = rest.shift().replace(/^@/, '');
   if(rest.length) out.knownFrom = rest.shift();
-  if(rest.length) out.note = rest.join('; ');
+  if(rest.length) out.note = rest.join(', ');   // everything after is details, commas kept
   return out;
 }
 function ctPreview(rows){
