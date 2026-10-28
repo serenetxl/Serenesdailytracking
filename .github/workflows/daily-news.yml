@@ -1,9 +1,7 @@
 name: Morning news digest
 
 on:
-  schedule:
-    - cron: "0 1 * * *"     # 9:00 am Singapore, every day
-  workflow_dispatch:         # lets you press "Run workflow" to test it
+  workflow_dispatch:         # started by cron-job.org at 9:00 SGT, or by you pressing "Run workflow"
 
 jobs:
   news:

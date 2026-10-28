@@ -1,10 +1,11 @@
 name: 定联 reminders
 
 on:
-  schedule:
-    - cron: "0 3 * * *"    # 11:00 am Singapore: today's list
-    - cron: "0 9 * * *"    # 5:00 pm Singapore: only if still pending
-  workflow_dispatch:        # lets you press "Run workflow" to test it
+  workflow_dispatch:        # started by cron-job.org (11:00 and 17:00 SGT), or by you pressing "Run workflow"
+    inputs:
+      mode:
+        description: "morning or evening"
+        default: "morning"
 
 jobs:
   remind:
@@ -20,5 +21,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          if [ "${{ github.event.schedule }}" = "0 9 * * *" ]; then MODE=evening; else MODE=morning; fi
+          MODE="${{ inputs.mode }}"
+          if [ "$MODE" != "evening" ]; then MODE=morning; fi
           node reminder.mjs $MODE
