@@ -72,7 +72,7 @@ export function buildMessage(data, today, mode) {
   if (!contacts.length && !chase.length && !bdToday.length && !bdTomorrow.length) return null;
 
   const lines = [];
-  lines.push(mode === "evening" ? "<b>Still pending today</b>" : "<b>Good morning. Your 定联 for today</b>");
+  lines.push(mode === "evening" ? "<b>Still pending today</b>" : "<b>Your 定联 for today</b>");
 
   if (bdToday.length) {
     lines.push("");
