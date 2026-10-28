@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 25 Oct</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 28 Oct</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -804,6 +804,7 @@
       <p class="empty-note" style="padding:0 0 10px">Settles today's points/streak and sends it to Odin for approval. Do this once, when you're done for the day.</p>
       <button class="save-btn" id="submitDayBtn">Submit Day</button>
       <div class="submit-status" id="submitStatus"></div>
+      <div id="keeperRepair"></div>
     </div>
 
     <!-- Data -->
@@ -1023,7 +1024,7 @@ window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   doc, getDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
-  settleDay, redeemReward, refreshRewardItems, refreshConditionalRewards, payWeeklyPoints, computeWeeklyStreakWeeks,
+  settleDay, computeMultiplier, POINT_VALUES, redeemReward, refreshRewardItems, refreshConditionalRewards, payWeeklyPoints, computeWeeklyStreakWeeks,
   reconcileWeekHistory, evaluateWeek, exerciseApprovedCount, computeRollingStreak, dayClearsBar,
   goalProgress, parseTiers, LEAGUE_CHALLENGE_GOAL,
   logTouchpoint, pingOdin,
@@ -1164,6 +1165,7 @@ function defaultState(){
     questLog: [],
     points: { total: 0, streakDays: 0, multiplier: 1, lastDayProcessed: null },
     rewardItems: DEFAULT_REWARD_ITEMS.map(r => ({ ...r })),
+    keepersHeld: 0,
     touchpointChallenge: { ...DEFAULT_TOUCHPOINT_CHALLENGE }
   };
 }
@@ -1257,6 +1259,7 @@ function mergeWithDefaults(parsed){
         todayStr: logicalToday() }).weeks,
       logicalNow()
     ),
+    keepersHeld: Math.max(0, Number(parsed.keepersHeld) || 0),
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
 }
@@ -2391,7 +2394,10 @@ async function doRedeem(rewardId){
   const result = redeemReward(state.points, state.rewardItems, rewardId);
   if(!result.ok){ showToast(result.error); return; }
   state.points = result.points; state.rewardItems = result.rewardItems;
-  saveState(); renderPointsBadge(); renderRewards();
+  // Buying a Daily Streak Keeper uses up the shop stock, so remember it separately:
+  // the keeper you own is spent when you Submit Day on an incomplete day.
+  if(rewardId === 'streak-keeper-daily') state.keepersHeld = (state.keepersHeld || 0) + 1;
+  saveState(); renderPointsBadge(); renderRewards(); renderSubmitStatus();
   await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...result.event, date: logicalToday(), pingSent: false });
   pingOdin(`💳 Serene redeemed <b>${result.event.reason.replace('Redeemed: ', '')}</b> (−${Math.abs(result.event.amount)} pts). Balance now ${result.points.total}.`);
   showToast('Redeemed');
@@ -2405,6 +2411,7 @@ function wireSubmitDay(){
 function renderSubmitStatus(){
   const el = document.getElementById('submitStatus');
   const btn = document.getElementById('submitDayBtn');
+  renderKeeperRepair();
   if(state.today.submittedForApproval){
     el.textContent = `Submitted — approval: ${state.today.approval.status}`;
     btn.disabled = true;
@@ -2412,6 +2419,39 @@ function renderSubmitStatus(){
     el.textContent = '';
     btn.disabled = false;
   }
+}
+// For a day that was already submitted as "incomplete" (streak broken) when a
+// bought Keeper should have covered it. Undoes the penalty and restores the streak.
+function renderKeeperRepair(){
+  const box = document.getElementById('keeperRepair');
+  if(!box) return;
+  const t = state.today;
+  const cleared = t.quests.filter(q => q.status === 'completed').length >= 3;
+  // qty 0 = one was bought this week (covers a Keeper bought before this fix existed).
+  const dk = state.rewardItems.find(r => r.id === 'streak-keeper-daily');
+  const ownsOne = (state.keepersHeld || 0) > 0 || (dk && dk.qty <= 0);
+  const needs = t.submittedForApproval && !t.streakKeeperUsed && !cleared && ownsOne && state.points.streakDays === 0;
+  if(!needs){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="empty-note" style="padding:10px 0 6px">You own a Daily Streak Keeper, but today was submitted without using it. Put in your streak before today and I'll undo the penalty and restore it.</div>
+    <input id="keeperPrevStreak" type="number" min="1" placeholder="Streak days before today" style="width:210px">
+    <button class="save-btn" id="keeperRepairBtn" style="margin-left:6px">Use Keeper on today</button>`;
+  document.getElementById('keeperRepairBtn').addEventListener('click', repairKeeperToday);
+}
+async function repairKeeperToday(){
+  const n = parseInt(document.getElementById('keeperPrevStreak').value, 10);
+  if(!(n > 0)){ showToast('Enter your streak before today'); return; }
+  const t = state.today;
+  const refund = Math.abs(POINT_VALUES.INCOMPLETE_DAY_PENALTY);
+  state.points.total += refund;
+  state.points.streakDays = n;
+  state.points.multiplier = computeMultiplier(n);
+  state.keepersHeld = Math.max(0, (state.keepersHeld || 0) - 1);
+  t.streakKeeperUsed = true;
+  saveState(); renderPointsBadge(); renderSubmitStatus();
+  const ev = { type: 'streak_save', amount: refund, reason: 'Streak Keeper applied to ' + t.date + ' (penalty reversed)' };
+  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: t.date, pingSent: true }).catch(()=>{});
+  pingOdin(`🛡️ <b>${t.date}</b>: Serene's Daily Streak Keeper applied after submit. Penalty reversed (+${refund}), streak restored to ${n}d. Balance now ${state.points.total}.`);
+  showToast('Streak restored');
 }
 async function submitDay(){
   if(state.today.submittedForApproval){ showToast('Already submitted today'); return; }
@@ -2423,12 +2463,12 @@ async function submitDay(){
   const allCleared = questsCompleted >= totalQuests;
 
   let streakKeeperSpent = false;
-  if(anyUpdatePosted && !allCleared && state.points.streakDays > 0){
-    const dailyKeeper = state.rewardItems.find(r => r.id === 'streak-keeper-daily');
-    if(dailyKeeper && dailyKeeper.qty > 0){
-      streakKeeperSpent = confirm("Today's agenda wasn't fully cleared. Spend a Daily Streak Keeper to protect your streak?");
-      if(streakKeeperSpent){ dailyKeeper.qty -= 1; t.streakKeeperUsed = true; }
-    }
+  if(!allCleared && state.points.streakDays > 0 && (state.keepersHeld || 0) > 0){
+    // You bought it on purpose, so use it automatically (no popup to miss).
+    streakKeeperSpent = true;
+    state.keepersHeld -= 1;
+    t.streakKeeperUsed = true;
+    showToast('Daily Streak Keeper used — streak protected');
   }
 
   const { points: newPoints, events } = settleDay(state.points, {
