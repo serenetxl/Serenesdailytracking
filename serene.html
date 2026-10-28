@@ -828,6 +828,14 @@
         <span class="td-chip" id="ctDueCount"></span>
       </div>
       <div class="empty-note" style="padding:0 0 6px">When someone is due, drop them a message whether they reply or not. Tap Messaged and their clock restarts.</div>
+      <div id="ctPauseRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 0 10px">
+        <span style="opacity:.8">Rough day? Pause for</span>
+        <input class="td-input" id="ctPauseDays" type="number" min="1" max="30" value="3" style="width:60px">
+        <span style="opacity:.8">days</span>
+        <button class="quest-action-btn" id="ctPauseBtn">Pause 定联</button>
+        <button class="quest-action-btn" id="ctPauseUndo" style="display:none">Undo</button>
+        <div id="ctPauseMsg" class="empty-note" style="padding:0;width:100%"></div>
+      </div>
       <div id="ctBdayList"></div>
       <div id="ctDueList"></div>
     </div>
@@ -3348,6 +3356,44 @@ function renderContacts(){
   const dl = document.getElementById('ctNameList');
   if(dl) dl.innerHTML = all.map(c => `<option value="${escHtml(c.name)}">`).join('');
 }
+
+/* ----- Pause 定联 (rest days) ----- */
+// Everyone's clock moves forward by N days, so nothing stacks up. People who were
+// already due (or overdue) are spread over the 5 days after the pause, best class first.
+let ctPauseSnapshot = null;
+function ctPause(n){
+  if(!contactsReady){ showToast('Contacts still loading'); return; }
+  const today = logicalToday();
+  const all = cdata.contacts;
+  const snap = {}; all.forEach(c => { snap[c.id] = c.nextDue; });
+  const due = all.filter(c => c.nextDue && c.nextDue <= today)
+    .sort((a, b) => (CT_CLASSES.indexOf(a.cls) - CT_CLASSES.indexOf(b.cls)) || (a.nextDue < b.nextDue ? -1 : 1));
+  const dueIds = new Set(due.map(c => c.id));
+  all.forEach(c => { if(c.nextDue && !dueIds.has(c.id)) c.nextDue = tdAddDays(c.nextDue, n); });
+  const perDay = Math.max(1, Math.ceil(due.length / 5));
+  due.forEach((c, i) => { c.nextDue = tdAddDays(today, n + Math.floor(i / perDay)); });
+  if(!saveContacts()){ all.forEach(c => { if(snap[c.id] !== undefined) c.nextDue = snap[c.id]; }); return; }
+  ctPauseSnapshot = snap;
+  document.getElementById('ctPauseUndo').style.display = '';
+  document.getElementById('ctPauseMsg').textContent = `Paused ${n} day${n > 1 ? 's' : ''}. ${due.length} who were due are spread over the 5 days after. Birthdays and "waiting on reply" still show.`;
+  renderContacts(); renderWaiting();
+}
+function ctPauseUndoNow(){
+  if(!ctPauseSnapshot) return;
+  cdata.contacts.forEach(c => { if(ctPauseSnapshot[c.id] !== undefined) c.nextDue = ctPauseSnapshot[c.id]; });
+  if(saveContacts()){
+    ctPauseSnapshot = null;
+    document.getElementById('ctPauseUndo').style.display = 'none';
+    document.getElementById('ctPauseMsg').textContent = 'Pause undone.';
+    renderContacts(); renderWaiting();
+  }
+}
+document.getElementById('ctPauseBtn').addEventListener('click', () => {
+  const n = parseInt(document.getElementById('ctPauseDays').value, 10);
+  if(!(n >= 1 && n <= 30)){ showToast('Pick 1 to 30 days'); return; }
+  ctPause(n);
+});
+document.getElementById('ctPauseUndo').addEventListener('click', ctPauseUndoNow);
 
 function ctMarkMessaged(c){
   const today = logicalToday();
