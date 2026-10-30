@@ -584,7 +584,7 @@ function renderRewardsManage(){
   const items = state.rewardItems || [];
   if(!items.length){ wrap.innerHTML = '<p class="sub">No reward items set up.</p>'; return; }
   const weeksUnbroken = computeRollingStreak({ dayHistory: state.dayHistory || [],
-    weekHistory: reconcileWeekHistory(state.weekHistory || [], state.dayHistory || []), todayStr: logicalToday() }).weeks;
+    weekHistory: reconcileWeekHistory(state.weekHistory || [], state.dayHistory || [], state.awayDays || []), todayStr: logicalToday(), awayDays: state.awayDays || [] }).weeks;
   wrap.innerHTML = items.map(item => {
     const unlimited = item.maxQty >= 9999;
     let stockLabel;

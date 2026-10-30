@@ -365,25 +365,30 @@ export function exerciseApprovedCount(weekStart, today, dayHistory) {
 }
 
 // Re-evaluates one archived week against the day-by-day history.
-export function evaluateWeek(entry, dayHistory) {
+export function evaluateWeek(entry, dayHistory, awayDays = []) {
+  const away = new Set(awayDays || []);
   const targets = { ...DEFAULT_WEEKLY_TARGETS, ...(entry.targets || {}) };
   const byDate = new Map((dayHistory || []).map(d => [d.date, d]));
   const dates = Array.from({ length: 7 }, (_, i) => addDaysStr(entry.weekStart, i));
+  // Away days are skipped: they neither count as cleared nor as broken, and a week
+  // with any away day has its weekly targets waived.
+  const awayCount = dates.filter(dt => away.has(dt)).length;
   const dailyOk = dates.every(dt => {
+    if (away.has(dt)) return true;
     const d = byDate.get(dt);
     return !!d && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
   });
   const exercise = dates.filter(dt => (byDate.get(dt) || {}).exerciseApproved === "approved").length;
   const appointments = (entry.stats && entry.stats.appointments) || 0;
-  const metAllTargets = appointments >= targets.appointments && exercise >= targets.exercise;
-  return { dailyOk, exercise, appointments, metAllTargets, unbroken: dailyOk && metAllTargets };
+  const metAllTargets = awayCount > 0 || (appointments >= targets.appointments && exercise >= targets.exercise);
+  return { dailyOk, exercise, appointments, metAllTargets, unbroken: dailyOk && metAllTargets, awayDays: awayCount };
 }
 
 // Refreshes every archived week's derived fields (exercise count, flags) from
 // dayHistory. Pure — returns a new array; call on load so late approvals count.
-export function reconcileWeekHistory(weekHistory, dayHistory) {
+export function reconcileWeekHistory(weekHistory, dayHistory, awayDays = []) {
   return (weekHistory || []).map(w => {
-    const ev = evaluateWeek(w, dayHistory);
+    const ev = evaluateWeek(w, dayHistory, awayDays);
     return {
       ...w,
       stats: { ...(w.stats || {}), exercise: ev.exercise },
@@ -436,12 +441,17 @@ export function dayClearsBar(d) {
 }
 
 // weekHistory must already be reconciled (reconcileWeekHistory) so exercise is current.
-export function computeRollingStreak({ dayHistory, weekHistory, todayStr }) {
+export function computeRollingStreak({ dayHistory, weekHistory, todayStr, awayDays }) {
   const byDate = new Map((dayHistory || []).map(d => [d.date, d]));
+  const away = new Set(awayDays || []);
   const yesterday = addDaysStr(todayStr, -1);
-  let runLen = 0;
-  for (let dt = yesterday; dayClearsBar(byDate.get(dt)); dt = addDaysStr(dt, -1)) runLen++;
-  const runStart = runLen ? addDaysStr(yesterday, -(runLen - 1)) : todayStr;
+  // Away days are skipped: they don't extend the run and they don't break it.
+  let runLen = 0, runStart = todayStr;
+  for (let dt = yesterday, guard = 0; guard < 4000; dt = addDaysStr(dt, -1), guard++) {
+    if (away.has(dt)) continue;
+    if (!dayClearsBar(byDate.get(dt))) break;
+    runLen++; runStart = dt;
+  }
   let anchor = runStart;
   let lastMiss = null;
   for (const w of (weekHistory || [])) {
@@ -452,7 +462,7 @@ export function computeRollingStreak({ dayHistory, weekHistory, todayStr }) {
     }
   }
   let span = 0;
-  if (anchor <= yesterday) { for (let dt = anchor; dt <= yesterday; dt = addDaysStr(dt, 1)) span++; }
+  if (anchor <= yesterday) { for (let dt = anchor; dt <= yesterday; dt = addDaysStr(dt, 1)) if (!away.has(dt)) span++; }
   return { weeks: Math.floor(span / 7), runLen, runStart, anchor, span, day: (span % 7) + 1, lastMissedWeek: lastMiss };
 }
 

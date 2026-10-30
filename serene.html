@@ -584,6 +584,22 @@
   <!-- ============ DASHBOARD ============ -->
   <section class="view active" id="view-dashboard">
 
+    <!-- Away mode -->
+    <div class="card" id="awayCard">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">✈</span>Away mode</div>
+      </div>
+      <div id="awayStatus" class="empty-note" style="padding:0 0 8px"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <input class="td-input" type="date" id="awayFrom" style="width:auto">
+        <span style="opacity:.7">to</span>
+        <input class="td-input" type="date" id="awayTo" style="width:auto">
+        <button class="quest-action-btn" id="awaySave">Set away</button>
+        <button class="quest-action-btn" id="awayClear" style="display:none">I'm back</button>
+      </div>
+      <label style="display:block;margin-top:8px;font-size:13px;opacity:.85"><input type="checkbox" id="awayPauseCt" checked> Also pause 定联 until I'm back</label>
+    </div>
+
     <!-- IDA Progress -->
     <div class="card">
       <div class="card-head">
@@ -1174,6 +1190,7 @@ function defaultState(){
     points: { total: 0, streakDays: 0, multiplier: 1, lastDayProcessed: null },
     rewardItems: DEFAULT_REWARD_ITEMS.map(r => ({ ...r })),
     keepersHeld: 0,
+    away: null, awayDays: [],
     touchpointChallenge: { ...DEFAULT_TOUCHPOINT_CHALLENGE }
   };
 }
@@ -1249,7 +1266,7 @@ function mergeWithDefaults(parsed){
     today: mergedToday,
     // Re-derive each archived week from the day-by-day history so a late
     // approval from Odin (or a corrected day) is reflected in the streak.
-    weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
+    weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || [], parsed.awayDays || []),
     dayHistory: parsed.dayHistory || [],
     pipeline: { cases: (parsed.pipeline && parsed.pipeline.cases) || [] },
     fycGoals: Array.isArray(parsed.fycGoals) ? parsed.fycGoals : base.fycGoals,
@@ -1263,11 +1280,13 @@ function mergeWithDefaults(parsed){
     rewardItems: refreshConditionalRewards(
       mergeRewardItems(base.rewardItems, parsed.rewardItems),
       computeRollingStreak({ dayHistory: parsed.dayHistory || [],
-        weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || []),
-        todayStr: logicalToday() }).weeks,
+        weekHistory: reconcileWeekHistory(parsed.weekHistory || [], parsed.dayHistory || [], parsed.awayDays || []),
+        todayStr: logicalToday(), awayDays: parsed.awayDays || [] }).weeks,
       logicalNow()
     ),
     keepersHeld: Math.max(0, Number(parsed.keepersHeld) || 0),
+    away: parsed.away && parsed.away.from && parsed.away.to ? { from: parsed.away.from, to: parsed.away.to } : null,
+    awayDays: Array.isArray(parsed.awayDays) ? parsed.awayDays : [],
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
 }
@@ -1308,7 +1327,7 @@ function saveState(){
 // approval (from odin.html) pays the rest exactly once.
 // Rolling streak weeks (7 days from when the current run of cleared dailies began).
 function rollingNow(){
-  return computeRollingStreak({ dayHistory: state.dayHistory, weekHistory: state.weekHistory, todayStr: logicalToday() });
+  return computeRollingStreak({ dayHistory: state.dayHistory, weekHistory: state.weekHistory, todayStr: logicalToday(), awayDays: state.awayDays || [] });
 }
 function markProofPointsAwarded(t){
   if(t.touchpoint.logged && t.touchpoint.approved === 'approved') t.touchpoint.pointsAwarded = true;
@@ -1381,7 +1400,8 @@ async function checkDailyReset(){
     // If yesterday was never submitted to Odin, settle it now as a missed/
     // incomplete day so points/streak/pings still happen even if she never
     // opened the app to hit "Submit Day".
-    if(!t.submittedForApproval){
+    const awayThatDay = (state.awayDays || []).includes(t.date);   // Away mode: no penalties, nothing to settle
+    if(!t.submittedForApproval && !awayThatDay){
       // Work dailies are her own private system — they don't count as an update to Odin.
       // Posting the day's agenda to Odin counts as an update (her rule: report the 3 agendas AND do them).
       const anyUpdatePosted = questsDone > 0 || !!t.energy || t.touchpoint.logged || !!t.agendaPinged;
@@ -1401,7 +1421,7 @@ async function checkDailyReset(){
       }
     }
 
-    if(hadActivity){
+    if(hadActivity && !awayThatDay){
       state.dayHistory.unshift({
         date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE_OLD.length,
         questsDone, questsTotal: 3, energy: t.energy,
@@ -1422,7 +1442,7 @@ async function checkDailyReset(){
     }
 
     state.rewardItems = refreshRewardItems(state.rewardItems, logicalNow());
-    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
+    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays || []);
     state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
     applyWeeklyPoints();
     state.today = defaultToday(todayStr);
@@ -1451,7 +1471,7 @@ function checkWeeklyReset(){
         weekStart: ms, weekEnd: addDaysLocal(ms, 6), stats: emptyStats(), targets: { ...state.weeklyTargets }, missed: true
       });
     }
-    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory);
+    state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays || []);
     state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
     applyWeeklyPoints();
     sendWeeklyRecap(w.weekStart);
@@ -2412,6 +2432,67 @@ async function doRedeem(rewardId){
 }
 
 /* ---------- Submit Day ---------- */
+/* ---------- Away mode ---------- */
+// While away: streak frozen (no growth, no break), no daily penalties, no Submit Day,
+// weekly targets waived for weeks that include an away day. Odin gets pinged on/off.
+function awayExpand(from, to){
+  const out = []; let guard = 0;
+  for(let d = from; d <= to && guard < 120; d = addDaysLocal(d, 1), guard++) out.push(d);
+  return out;
+}
+function niceDate(d){ return parseDate(d).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }); }
+function renderAway(){
+  const st = document.getElementById('awayStatus'); if(!st) return;
+  const a = state.away, today = logicalToday();
+  const clr = document.getElementById('awayClear');
+  if(a && a.to >= today){
+    const on = a.from <= today;
+    st.textContent = on ? `Away ${niceDate(a.from)} – ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `Away mode set for ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
+    document.getElementById('awayFrom').value = a.from; document.getElementById('awayTo').value = a.to;
+    clr.style.display = '';
+  } else {
+    st.textContent = 'Off. Set the dates when you travel and your streak, dailies and weekly targets pause.';
+    clr.style.display = 'none';
+  }
+}
+async function setAway(){
+  const from = document.getElementById('awayFrom').value, to = document.getElementById('awayTo').value, today = logicalToday();
+  if(!from || !to){ showToast('Pick both dates'); return; }
+  if(to < from){ showToast('The end date is before the start'); return; }
+  if(to < today){ showToast('That trip is already over'); return; }
+  const days = awayExpand(from, to);
+  if(days.length > 31){ showToast('Max 31 days at a time. Talk to Odin for longer.'); return; }
+  state.away = { from, to };
+  // keep days that already happened plus the new range
+  state.awayDays = [...new Set([...(state.awayDays || []).filter(d => d < today && !days.includes(d)), ...days])].sort();
+  state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
+  state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
+  saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
+  if(document.getElementById('awayPauseCt').checked && contactsReady){
+    const n = Math.max(1, tdDaysBetween(today, to) + 1);
+    ctPause(n);
+  }
+  pingOdin(`✈️ Serene is away <b>${from}</b> to <b>${to}</b> (${days.length} days). Streak is frozen and dailies/weekly targets are paused for those days.`);
+  showToast('Away mode set');
+}
+async function clearAway(){
+  const today = logicalToday();
+  if(!state.away) return;
+  const from = state.away.from;
+  // days already passed stay away; today and later go back to normal
+  state.awayDays = (state.awayDays || []).filter(d => d < today);
+  state.away = from < today ? { from, to: addDaysLocal(today, -1) } : null;
+  state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
+  state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
+  saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
+  pingOdin(`🏠 Serene is back from Away mode. Streak and dailies are live again from ${today}.`);
+  showToast('Welcome back');
+}
+function wireAway(){
+  document.getElementById('awaySave').addEventListener('click', setAway);
+  document.getElementById('awayClear').addEventListener('click', clearAway);
+  renderAway();
+}
 function wireSubmitDay(){
   document.getElementById('submitDayBtn').addEventListener('click', submitDay);
   renderSubmitStatus();
@@ -2420,6 +2501,7 @@ function renderSubmitStatus(){
   const el = document.getElementById('submitStatus');
   const btn = document.getElementById('submitDayBtn');
   renderKeeperRepair();
+  if((state.awayDays || []).includes(logicalToday())){ el.textContent = 'Away mode is on today — nothing to submit.'; btn.disabled = true; return; }
   if(state.today.submittedForApproval){
     el.textContent = `Submitted — approval: ${state.today.approval.status}`;
     btn.disabled = true;
@@ -2463,6 +2545,7 @@ async function repairKeeperToday(){
 }
 async function submitDay(){
   if(state.today.submittedForApproval){ showToast('Already submitted today'); return; }
+  if((state.awayDays || []).includes(state.today.date)){ showToast('Away mode is on — nothing to submit today'); return; }
   const t = state.today;
   const questsCompleted = t.quests.filter(q => q.status === 'completed').length;
   const totalQuests = 3;
@@ -3806,14 +3889,14 @@ function wireWaiting(){
 function renderAll(){
   renderHeader(); renderPointsBadge(); renderGoal(); renderFycOpened(); renderFycGoals(); renderUnfinished(); renderTodos();
   renderQuests(); renderMainQuestPrompt(); renderDailies(); renderTimer(); renderStats();
-  renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus();
+  renderEnergy(); renderJournal(); renderTouchpointExercise(); renderRewards(); renderSubmitStatus(); renderAway();
   if(document.getElementById('view-history').classList.contains('active')) renderHistory();
   if(document.getElementById('view-pipeline').classList.contains('active')) renderPipeline();
   renderContacts(); renderWaiting();
 }
 function wireAllHandlers(){
   wireTabs(); wireGoal(); wireTimer(); wireStats(); wireEnergy(); wireJournal(); wireFycGoals(); wireWaiting(); wireContacts(); wireTodos();
-  wireTouchpointExercise(); wireSubmitDay(); wirePipeline(); wireExportImport();
+  wireTouchpointExercise(); wireSubmitDay(); wireAway(); wirePipeline(); wireExportImport();
 }
 </script>
 </body>
