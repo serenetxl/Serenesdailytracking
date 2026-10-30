@@ -584,21 +584,8 @@
   <!-- ============ DASHBOARD ============ -->
   <section class="view active" id="view-dashboard">
 
-    <!-- Away mode -->
-    <div class="card" id="awayCard">
-      <div class="card-head">
-        <div class="card-title"><span class="icon">✈</span>Away mode</div>
-      </div>
-      <div id="awayStatus" class="empty-note" style="padding:0 0 8px"></div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-        <input class="td-input" type="date" id="awayFrom" style="width:auto">
-        <span style="opacity:.7">to</span>
-        <input class="td-input" type="date" id="awayTo" style="width:auto">
-        <button class="quest-action-btn" id="awaySave">Set away</button>
-        <button class="quest-action-btn" id="awayClear" style="display:none">I'm back</button>
-      </div>
-      <label style="display:block;margin-top:8px;font-size:13px;opacity:.85"><input type="checkbox" id="awayPauseCt" checked> Also pause 定联 until I'm back</label>
-    </div>
+    <!-- Away banner: only shows while Away mode is set -->
+    <div id="awayBanner" class="card" style="display:none;padding:10px 14px"></div>
 
     <!-- IDA Progress -->
     <div class="card">
@@ -832,6 +819,19 @@
         <input type="file" id="importFile" accept="application/json">
       </div>
     </div>
+    <!-- Away mode (collapsed, bottom of dashboard) -->
+    <details class="card" id="awayCard">
+      <summary class="card-title" style="cursor:pointer"><span class="icon">✈</span>Away mode (travelling)</summary>
+      <div id="awayStatus" class="empty-note" style="padding:8px 0"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <input class="td-input" type="date" id="awayFrom" style="width:auto">
+        <span style="opacity:.7">to</span>
+        <input class="td-input" type="date" id="awayTo" style="width:auto">
+        <button class="quest-action-btn" id="awaySave">Set away</button>
+        <button class="quest-action-btn" id="awayClear" style="display:none">I'm back</button>
+      </div>
+      <label style="display:block;margin-top:8px;font-size:13px;opacity:.85"><input type="checkbox" id="awayPauseCt" checked> Also pause 定联 until I'm back</label>
+    </details>
   </section>
 
   <!-- ============ 定联 (regular contact) ============ -->
@@ -2444,13 +2444,15 @@ function niceDate(d){ return parseDate(d).toLocaleDateString('en-SG', { day: 'nu
 function renderAway(){
   const st = document.getElementById('awayStatus'); if(!st) return;
   const a = state.away, today = logicalToday();
-  const clr = document.getElementById('awayClear');
+  const clr = document.getElementById('awayClear'), bn = document.getElementById('awayBanner');
   if(a && a.to >= today){
     const on = a.from <= today;
     st.textContent = on ? `Away ${niceDate(a.from)} – ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `Away mode set for ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
     document.getElementById('awayFrom').value = a.from; document.getElementById('awayTo').value = a.to;
     clr.style.display = '';
+    bn.style.display = ''; bn.textContent = on ? `✈ Away until ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `✈ Away ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
   } else {
+    bn.style.display = 'none';
     st.textContent = 'Off. Set the dates when you travel and your streak, dailies and weekly targets pause.';
     clr.style.display = 'none';
   }
