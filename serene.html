@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 28 Oct</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 5 Nov</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -831,6 +831,16 @@
         <button class="quest-action-btn" id="awayClear" style="display:none">I'm back</button>
       </div>
       <label style="display:block;margin-top:8px;font-size:13px;opacity:.85"><input type="checkbox" id="awayPauseCt" checked> Also pause 定联 until I'm back</label>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--card-border)">
+        <div class="empty-note" style="padding:0 0 6px">A day that was wrongly penalised while you were away? Fix it here. It marks the day as away, gives the points back and restores your streak.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <input class="td-input" type="date" id="fixDate" style="width:auto">
+          <input class="td-input" type="number" min="0" id="fixStreak" placeholder="Streak before that day" style="width:170px">
+          <input class="td-input" type="number" min="0" id="fixPts" value="20" style="width:70px" title="Points to give back">
+          <button class="quest-action-btn" id="fixDayBtn">Fix that day</button>
+        </div>
+        <div class="empty-note" style="padding:4px 0 0;font-size:12px">The last box is the points to give back (20 if it said "No daily update posted", 10 if "agenda not fully cleared").</div>
+      </div>
     </details>
   </section>
 
@@ -2461,16 +2471,16 @@ async function setAway(){
   const from = document.getElementById('awayFrom').value, to = document.getElementById('awayTo').value, today = logicalToday();
   if(!from || !to){ showToast('Pick both dates'); return; }
   if(to < from){ showToast('The end date is before the start'); return; }
-  if(to < today){ showToast('That trip is already over'); return; }
   const days = awayExpand(from, to);
   if(days.length > 31){ showToast('Max 31 days at a time. Talk to Odin for longer.'); return; }
-  state.away = { from, to };
+  const past = to < today;   // correcting a trip that already ended: only mark the days, no banner
+  state.away = past ? state.away : { from, to };
   // keep days that already happened plus the new range
   state.awayDays = [...new Set([...(state.awayDays || []).filter(d => d < today && !days.includes(d)), ...days])].sort();
   state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
   state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
   saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
-  if(document.getElementById('awayPauseCt').checked && contactsReady){
+  if(!past && document.getElementById('awayPauseCt').checked && contactsReady){
     const n = Math.max(1, tdDaysBetween(today, to) + 1);
     ctPause(n);
   }
@@ -2490,7 +2500,29 @@ async function clearAway(){
   pingOdin(`🏠 Serene is back from Away mode. Streak and dailies are live again from ${today}.`);
   showToast('Welcome back');
 }
+async function fixPenalisedDay(){
+  const date = document.getElementById('fixDate').value;
+  const before = parseInt(document.getElementById('fixStreak').value, 10);
+  const refund = Math.max(0, parseInt(document.getElementById('fixPts').value, 10) || 0);
+  const today = logicalToday();
+  if(!date){ showToast('Pick the date that was penalised'); return; }
+  if(date >= today){ showToast('Pick a day that already passed'); return; }
+  if(!(before >= 0)){ showToast('Enter your streak before that day'); return; }
+  if(!(state.awayDays || []).includes(date)) state.awayDays = [...(state.awayDays || []), date].sort();
+  state.points.total += refund;
+  state.points.streakDays = before + (state.points.streakDays || 0);
+  state.points.multiplier = computeMultiplier(state.points.streakDays);
+  state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
+  state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
+  saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
+  const ev = { type: 'streak_save', amount: refund, reason: 'Away day fixed: ' + date + ' (penalty reversed)' };
+  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date, pingSent: true }).catch(()=>{});
+  pingOdin(`🛡️ <b>${date}</b> was an away day, so Serene's penalty is reversed (+${refund}). Streak restored to ${state.points.streakDays}d. Balance now ${state.points.total}.`);
+  showToast('Fixed');
+}
 function wireAway(){
+  document.getElementById('fixDayBtn').addEventListener('click', fixPenalisedDay);
+  const fd = document.getElementById('fixDate'); if(fd && !fd.value) fd.value = addDaysLocal(logicalToday(), -1);
   document.getElementById('awaySave').addEventListener('click', setAway);
   document.getElementById('awayClear').addEventListener('click', clearAway);
   renderAway();
