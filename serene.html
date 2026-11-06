@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov c</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov d</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -1344,7 +1344,7 @@ async function loadState(){
 /* ---------- Out-of-date copy guard ----------
    Bump APP_BUILD on every release. An open copy that is older than what's deployed stops saving and
    scoring (so a stale tab/phone can't overwrite newer data) and shows a banner to reload. */
-const APP_BUILD = 2026110604;
+const APP_BUILD = 2026110605;
 let appStale = false;
 async function checkAppVersion(){
   try{
@@ -2334,7 +2334,7 @@ function renderTouchpointExercise(){
   tpPhotoInput.disabled = state.today.touchpoint.approved === 'approved';   // can still add/replace the photo until approved
   tpBtn.textContent = state.today.touchpoint.logged
     ? (state.today.touchpoint.approved === 'approved' ? 'Logged — approved ✓' : state.today.touchpoint.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
-    : 'Log a touchpoint today';
+    : 'Log a touchpoint today (photo required)';
   document.getElementById('touchpointPhotoNote').textContent = proofNoteText('touchpoint');
   const exLine = document.getElementById('exerciseStatusLine');
   exLine.textContent = state.today.exercise.logged
@@ -2343,6 +2343,7 @@ function renderTouchpointExercise(){
   const exBtn = document.getElementById('exerciseBtn');
   const exPhotoInput = document.getElementById('exercisePhotoInput');
   exBtn.disabled = state.today.exercise.logged;
+  if(!state.today.exercise.logged) exBtn.textContent = 'Log exercise (photo required)';
   exPhotoInput.disabled = state.today.exercise.approved === 'approved';
   document.getElementById('exercisePhotoNote').textContent = proofNoteText('exercise');
 }
@@ -2420,28 +2421,36 @@ function wireTouchpointExercise(){
       const file = input.files[0]; if(!file) return;
       const o = state.today[kind];
       if(o.logged && o.approved !== 'approved'){ input.value = ''; attachProof(kind, file); }
-      else if(!o.logged){ proofNote[kind] = 'Photo ready. Tap the Log button to send it.'; renderTouchpointExercise(); }
+      else if(!o.logged){ proofNote[kind] = 'Photo ready. Tap the Log button to log it with the photo.'; renderTouchpointExercise(); }
     });
   });
-  document.getElementById('touchpointBtn').addEventListener('click', () => {
-    const fileInput = document.getElementById('touchpointPhotoInput');
-    const file = fileInput.files[0]; fileInput.value = '';
-    state.today.touchpoint = { logged: true, approved: 'pending', photoUrl: null };
-    state.touchpointChallenge = logTouchpoint(state.touchpointChallenge);
-    proofNote.touchpoint = '';
-    saveState(); renderTouchpointExercise();
-    showToast(file ? 'Touchpoint logged. Uploading photo…' : 'Touchpoint logged, pending Odin (no photo yet)');
-    if(file) attachProof('touchpoint', file);
-  });
-  document.getElementById('exerciseBtn').addEventListener('click', () => {
-    const fileInput = document.getElementById('exercisePhotoInput');
-    const file = fileInput.files[0]; fileInput.value = '';
-    state.today.exercise = { logged: true, approved: 'pending', photoUrl: null };
-    proofNote.exercise = '';
-    saveState(); renderTouchpointExercise();
-    showToast(file ? 'Exercise logged. Uploading photo…' : 'Exercise logged, pending Odin (no photo yet)');
-    if(file) attachProof('exercise', file);
-  });
+  // A touchpoint or exercise can only be logged WITH a photo. The photo uploads first; the log is
+  // recorded only once it has saved, so nothing is ever logged without proof.
+  async function logWithPhoto(kind, label){
+    const fileInput = document.getElementById(kind + 'PhotoInput');
+    const btn = document.getElementById(kind + 'Btn');
+    const file = fileInput.files[0];
+    if(!file){ showToast('Pick a photo first. A ' + label + ' can only be logged with proof'); return; }
+    const date = state.today.date;
+    btn.disabled = true; proofNote[kind] = 'Uploading photo… keep this page open';
+    renderTouchpointExercise(); btn.disabled = true;
+    try{
+      const url = await withTimeout(saveProofPhoto(kind, date, file), 60000);
+      if(state.today.date !== date) throw new Error('day changed during upload');
+      state.today[kind] = { logged: true, approved: 'pending', photoUrl: url };
+      if(kind === 'touchpoint') state.touchpointChallenge = logTouchpoint(state.touchpointChallenge);
+      fileInput.value = ''; proofNote[kind] = '';
+      saveState(); renderTouchpointExercise();
+      showToast(label[0].toUpperCase() + label.slice(1) + ' logged. Odin can see the photo now.');
+    }catch(e){
+      console.error('Log with photo failed', e);
+      proofNote[kind] = e && e.code === 'photo-too-large' ? 'That photo is too big. Pick another one.' : 'Upload failed, so nothing was logged. Try again.';
+      renderTouchpointExercise();
+      showToast('Not logged. The photo did not upload');
+    }
+  }
+  document.getElementById('touchpointBtn').addEventListener('click', () => logWithPhoto('touchpoint', 'touchpoint'));
+  document.getElementById('exerciseBtn').addEventListener('click', () => logWithPhoto('exercise', 'exercise session'));
 }
 
 /* ---------- Rewards ---------- */
