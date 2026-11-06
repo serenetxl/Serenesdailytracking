@@ -89,7 +89,7 @@ async function runActivityWatch(auth, today) {
     const { TELEGRAM } = await import("./engine.js");
     const r = await fetch(`https://api.telegram.org/bot${TELEGRAM.BOT_TOKEN}/sendMessage`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: ping, parse_mode: "HTML" })
+      body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: tagOdin(ping), parse_mode: "HTML" })
     });
     if (!r.ok) throw new Error("Odin ping failed: " + (await r.text()));
     console.log("Slow-activity ping sent to Odin.");
@@ -100,6 +100,11 @@ async function runActivityWatch(auth, today) {
   });
   if (!w.ok) throw new Error("Could not save activity watch: " + w.status);
 }
+
+// ---- tagging Odin so Telegram notifies him ----
+// Put Odin's Telegram @username below (letters/numbers/underscore, no @). Leave empty to send without a tag.
+const ODIN_USERNAME = "Ohdeeen";
+const tagOdin = text => { const u = (process.env.ODIN_USERNAME || ODIN_USERNAME || "").replace(/^@/, ""); return u ? `@${u} ${text}` : text; };
 
 // ---- reminder for Odin: things waiting for his approval ----
 // Runs with the morning job. Lists every submitted day still waiting, with its date and how old it is,
@@ -133,7 +138,7 @@ async function runApprovalNudge(auth, today) {
   const { TELEGRAM } = await import("./engine.js");
   const r = await fetch(`https://api.telegram.org/bot${TELEGRAM.BOT_TOKEN}/sendMessage`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: msg, parse_mode: "HTML" })
+    body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: tagOdin(msg), parse_mode: "HTML" })
   });
   if (!r.ok) throw new Error("Odin approval nudge failed: " + (await r.text()));
   console.log("Approval nudge sent to Odin.");
