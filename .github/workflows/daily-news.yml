@@ -1,7 +1,12 @@
-name: Morning news digest
+name: News digest
 
 on:
-  workflow_dispatch:         # started by cron-job.org at 9:00 SGT, or by you pressing "Run workflow"
+  workflow_dispatch:         # started by cron-job.org (morning and evening), or by pressing "Run workflow"
+    inputs:
+      mode:
+        description: "morning or evening"
+        required: false
+        default: "morning"
 
 jobs:
   news:
@@ -15,4 +20,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NEWS_MODE: ${{ github.event.inputs.mode }}
         run: node news.mjs
