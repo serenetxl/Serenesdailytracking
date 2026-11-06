@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 5 Nov</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -832,7 +832,7 @@
       </div>
       <label style="display:block;margin-top:8px;font-size:13px;opacity:.85"><input type="checkbox" id="awayPauseCt" checked> Also pause 定联 until I'm back</label>
       <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--card-border)">
-        <div class="empty-note" style="padding:0 0 6px">A day that was wrongly penalised while you were away? Fix it here. It marks the day as away, gives the points back and restores your streak.</div>
+        <div class="empty-note" style="padding:0 0 6px">A day you were away but got penalised anyway? Fix it here. It marks the day as away, gives the points back, restores your streak and tells Odin.</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <input class="td-input" type="date" id="fixDate" style="width:auto">
           <input class="td-input" type="number" min="0" id="fixStreak" placeholder="Streak before that day" style="width:170px">
@@ -840,6 +840,21 @@
           <button class="quest-action-btn" id="fixDayBtn">Fix that day</button>
         </div>
         <div class="empty-note" style="padding:4px 0 0;font-size:12px">The last box is the points to give back (20 if it said "No daily update posted", 10 if "agenda not fully cleared").</div>
+      </div>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--card-border)">
+        <div class="card-title" style="font-size:14px;margin-bottom:4px">Forgot to submit? Ask Odin</div>
+        <div class="empty-note" style="padding:0 0 6px">He gets your note and photo. If he approves, the day is excused, your points come back and your streak is restored.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <input class="td-input" type="date" id="lrDate" style="width:auto">
+          <input class="td-input" type="number" min="0" id="lrStreak" placeholder="Streak before" style="width:120px">
+          <input class="td-input" type="number" min="0" id="lrPts" value="20" style="width:70px" title="Points to give back">
+        </div>
+        <textarea class="td-input" id="lrNote" rows="2" placeholder="What happened, and what you did that day" style="width:100%;margin-top:6px"></textarea>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+          <input type="file" id="lrPhoto" accept="image/*" style="max-width:210px">
+          <button class="quest-action-btn" id="lrSend">Send to Odin</button>
+        </div>
+        <div id="lrList" style="margin-top:6px"></div>
       </div>
     </details>
   </section>
@@ -1200,7 +1215,7 @@ function defaultState(){
     points: { total: 0, streakDays: 0, multiplier: 1, lastDayProcessed: null },
     rewardItems: DEFAULT_REWARD_ITEMS.map(r => ({ ...r })),
     keepersHeld: 0,
-    away: null, awayDays: [],
+    away: null, awayDays: [], breakLog: {},
     touchpointChallenge: { ...DEFAULT_TOUCHPOINT_CHALLENGE }
   };
 }
@@ -1297,6 +1312,7 @@ function mergeWithDefaults(parsed){
     keepersHeld: Math.max(0, Number(parsed.keepersHeld) || 0),
     away: parsed.away && parsed.away.from && parsed.away.to ? { from: parsed.away.from, to: parsed.away.to } : null,
     awayDays: Array.isArray(parsed.awayDays) ? parsed.awayDays : [],
+    breakLog: parsed.breakLog && typeof parsed.breakLog === 'object' ? parsed.breakLog : {},
     touchpointChallenge: { ...base.touchpointChallenge, ...(parsed.touchpointChallenge||{}) }
   };
 }
@@ -1420,6 +1436,7 @@ async function checkDailyReset(){
         touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
         anyUpdatePosted, streakKeeperSpent: false
       });
+      noteBreak(state.points, events, t.date);
       state.points = newPoints;
       markProofPointsAwarded(t);
       for(const ev of events){
@@ -1532,6 +1549,7 @@ onAuthStateChanged(auth, async (user) => {
     try{
       startContactsSync();
       state = await loadState();
+      startLateSync();
       await checkDailyReset();
       checkWeeklyReset();
       applyWeeklyPoints();
@@ -1571,7 +1589,7 @@ onAuthStateChanged(auth, async (user) => {
     }, 60 * 1000);
   } else {
     if(unsubscribeState){ unsubscribeState(); unsubscribeState = null; }
-    stopContactsSync(); cdata = defaultContacts();
+    stopContactsSync(); stopLateSync(); cdata = defaultContacts();
     if(resetIntervalId){ clearInterval(resetIntervalId); resetIntervalId = null; }
     stopTimerLoop();
     document.getElementById('auth-screen').classList.remove('hidden');
@@ -2500,6 +2518,18 @@ async function clearAway(){
   pingOdin(`🏠 Serene is back from Away mode. Streak and dailies are live again from ${today}.`);
   showToast('Welcome back');
 }
+// Marks a day as excused, gives the penalty back and restores the streak.
+async function applyExcuse(date, before, refund, why){
+  if(!(state.awayDays || []).includes(date)) state.awayDays = [...(state.awayDays || []), date].sort();
+  state.points.total += refund;
+  state.points.streakDays = before + (state.points.streakDays || 0);
+  state.points.multiplier = computeMultiplier(state.points.streakDays);
+  state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
+  state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
+  if(state.breakLog) delete state.breakLog[date];
+  saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
+  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), type: 'streak_save', amount: refund, reason: why + ': ' + date + ' (penalty reversed)', date, pingSent: true }).catch(()=>{});
+}
 async function fixPenalisedDay(){
   const date = document.getElementById('fixDate').value;
   const before = parseInt(document.getElementById('fixStreak').value, 10);
@@ -2508,20 +2538,85 @@ async function fixPenalisedDay(){
   if(!date){ showToast('Pick the date that was penalised'); return; }
   if(date >= today){ showToast('Pick a day that already passed'); return; }
   if(!(before >= 0)){ showToast('Enter your streak before that day'); return; }
-  if(!(state.awayDays || []).includes(date)) state.awayDays = [...(state.awayDays || []), date].sort();
-  state.points.total += refund;
-  state.points.streakDays = before + (state.points.streakDays || 0);
-  state.points.multiplier = computeMultiplier(state.points.streakDays);
-  state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
-  state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
-  saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
-  const ev = { type: 'streak_save', amount: refund, reason: 'Away day fixed: ' + date + ' (penalty reversed)' };
-  await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date, pingSent: true }).catch(()=>{});
+  await applyExcuse(date, before, refund, 'Away day fixed');
   pingOdin(`🛡️ <b>${date}</b> was an away day, so Serene's penalty is reversed (+${refund}). Streak restored to ${state.points.streakDays}d. Balance now ${state.points.total}.`);
   showToast('Fixed');
 }
+
+/* ---------- Late submit requests (Odin approves, then it's applied) ---------- */
+function noteBreak(prev, events, date){
+  if(!events.some(e => e.type === 'streak_break')) return;
+  const pen = events.filter(e => e.type === 'penalty').reduce((t, e) => t + Math.abs(e.amount || 0), 0);
+  state.breakLog = state.breakLog || {};
+  state.breakLog[date] = { streakBefore: prev.streakDays || 0, refund: pen };
+  const keys = Object.keys(state.breakLog).sort();
+  while(keys.length > 14) delete state.breakLog[keys.shift()];
+}
+let lateRequests = [], lateUnsub = null, lateApplying = new Set();
+function startLateSync(){
+  if(lateUnsub) return;
+  lateUnsub = onSnapshot(collection(db, 'lateRequests'), (snap) => {
+    lateRequests = snap.docs.map(d => d.data()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    renderLateRequests();
+    applyApprovedRequests();
+  }, (err) => console.warn('Late requests sync failed', err));
+}
+function stopLateSync(){ if(lateUnsub){ lateUnsub(); lateUnsub = null; } lateRequests = []; }
+function renderLateRequests(){
+  const box = document.getElementById('lrList'); if(!box) return;
+  const label = { pending: 'waiting for Odin', approved: 'approved', declined: 'declined' };
+  box.innerHTML = lateRequests.slice(0, 5).map(r =>
+    `<div style="font-size:13px;padding:3px 0;opacity:.9">${escHtml(r.date)}: <b>${label[r.status] || r.status}</b>${r.status === 'approved' && !r.applied ? ' (applying…)' : ''}</div>`).join('');
+}
+async function applyApprovedRequests(){
+  if(!state) return;
+  for(const r of lateRequests){
+    if(r.status !== 'approved' || r.applied || lateApplying.has(r.date)) continue;
+    lateApplying.add(r.date);
+    try{
+      await applyExcuse(r.date, Number(r.streakBefore) || 0, Number(r.refund) || 0, 'Late submit approved by Odin');
+      await setDoc(doc(db, 'lateRequests', r.date), { ...r, applied: true, appliedAt: Date.now() });
+      pingOdin(`🛡️ Applied: <b>${r.date}</b> excused. +${Number(r.refund) || 0} pts back, streak restored to ${state.points.streakDays}d. Balance now ${state.points.total}.`);
+      showToast(r.date + ' excused. Points and streak restored');
+    }catch(e){ console.error('Could not apply late request', e); lateApplying.delete(r.date); }
+  }
+}
+function lrAutofill(){
+  const d = document.getElementById('lrDate').value;
+  const b = state && state.breakLog && state.breakLog[d];
+  if(b){ document.getElementById('lrStreak').value = b.streakBefore; document.getElementById('lrPts').value = b.refund; }
+}
+async function sendLateRequest(){
+  const date = document.getElementById('lrDate').value;
+  const streakBefore = parseInt(document.getElementById('lrStreak').value, 10);
+  const refund = Math.max(0, parseInt(document.getElementById('lrPts').value, 10) || 0);
+  const note = document.getElementById('lrNote').value.trim();
+  const file = document.getElementById('lrPhoto').files[0];
+  const btn = document.getElementById('lrSend');
+  if(!date || date >= logicalToday()){ showToast('Pick a day that already passed'); return; }
+  if(!(streakBefore >= 0)){ showToast('Enter your streak before that day'); return; }
+  if(!note){ showToast('Say what happened that day'); return; }
+  const existing = lateRequests.find(r => r.date === date);
+  if(existing && existing.status === 'pending'){ showToast('Already sent. Waiting for Odin'); return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try{
+    let photoUrl = null;
+    if(file) photoUrl = await withTimeout(saveProofPhoto('late', date, file), 60000);
+    await setDoc(doc(db, 'lateRequests', date), { date, note, streakBefore, refund, photoUrl, status: 'pending', requestedAt: Date.now() });
+    pingOdin(`🙏 <b>Serene asks you to excuse ${date}</b> (forgot to submit).\n"${escHtml(note)}"${photoUrl ? '\nPhoto proof attached.' : ''}\nOpen your panel → Late submit requests to approve or decline.`);
+    document.getElementById('lrNote').value = ''; document.getElementById('lrPhoto').value = '';
+    showToast('Sent to Odin');
+  }catch(e){
+    console.error('Late request failed', e);
+    showToast(e && e.code === 'timed-out' ? 'Photo upload timed out. Try again or send without it' : 'Could not send. Try again');
+  }
+  btn.disabled = false; btn.textContent = 'Send to Odin';
+}
 function wireAway(){
   document.getElementById('fixDayBtn').addEventListener('click', fixPenalisedDay);
+  document.getElementById('lrSend').addEventListener('click', sendLateRequest);
+  document.getElementById('lrDate').addEventListener('change', lrAutofill);
+  const ld = document.getElementById('lrDate'); if(ld && !ld.value){ ld.value = addDaysLocal(logicalToday(), -1); lrAutofill(); }
   const fd = document.getElementById('fixDate'); if(fd && !fd.value) fd.value = addDaysLocal(logicalToday(), -1);
   document.getElementById('awaySave').addEventListener('click', setAway);
   document.getElementById('awayClear').addEventListener('click', clearAway);
@@ -2601,6 +2696,7 @@ async function submitDay(){
     touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
     anyUpdatePosted, streakKeeperSpent
   });
+  noteBreak(state.points, events, t.date);
   state.points = newPoints;
   markProofPointsAwarded(t);
   t.submittedForApproval = true;

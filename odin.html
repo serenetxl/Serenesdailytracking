@@ -144,6 +144,7 @@ details.tool > .inner{padding:0 16px 16px}
 <section class="block">
   <h2>Needs your approval</h2>
   <div class="card attn" id="approvalCard"><div id="approvalWrap"><p class="sub">Loading…</p></div></div>
+  <div class="card attn" id="lateCard" style="display:none"><h2 style="margin-top:0">Late submit requests <small>Serene forgot to submit</small></h2><div id="lateWrap"></div></div>
 </section>
 
 <section class="block">
@@ -292,6 +293,7 @@ onAuthStateChanged(auth, async (user) => {
       document.getElementById('approvalWrap').innerHTML = `<p class="sub" style="color:var(--red)">Can't read data: ${escapeHtml(err.message)} — check Firestore rules are published in Firebase Console.</p>`;
     });
     subscribeLedger();
+    subscribeLate();
   } else {
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('hidden');
@@ -357,6 +359,41 @@ function renderApprovals(){
     const tb = wrap.querySelector(`[data-tpapprove="${it.date}"]`);
     if(tb) tb.onclick = () => approveTouchpoint(it.date, it.live);
   });
+}
+
+// Serene asks to have a forgotten day excused. Approving only marks it approved here;
+// her app then gives the points back and restores the streak (so only one place writes her score).
+let lateReqs = [];
+function subscribeLate(){
+  onSnapshot(collection(db, 'lateRequests'), (snap) => {
+    lateReqs = snap.docs.map(d => d.data()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    renderLate();
+  }, (err) => console.error('Late requests read failed', err));
+}
+function renderLate(){
+  const card = document.getElementById('lateCard'), wrap = document.getElementById('lateWrap');
+  const pending = lateReqs.filter(r => r.status === 'pending');
+  card.style.display = pending.length ? '' : 'none';
+  wrap.innerHTML = pending.map(r => `
+    <div class="row">
+      <span><b>${escapeHtml(r.date)}</b> — "${escapeHtml(r.note || '')}"<br>
+        Streak before: ${Number(r.streakBefore) || 0}d · points back if approved: +${Number(r.refund) || 0}
+        ${r.photoUrl ? ' · ' + proofLink(r.photoUrl) : ' · <span style="color:var(--amber)">no photo</span>'}</span>
+      <span>
+        <button class="approve" data-lateok="${escapeHtml(r.date)}">Approve</button>
+        <button data-latenope="${escapeHtml(r.date)}">Decline</button>
+      </span>
+    </div>`).join('');
+  pending.forEach(r => {
+    wrap.querySelector(`[data-lateok="${r.date}"]`).onclick = () => decideLate(r.date, 'approved');
+    wrap.querySelector(`[data-latenope="${r.date}"]`).onclick = () => decideLate(r.date, 'declined');
+  });
+}
+async function decideLate(date, status){
+  await updateDoc(doc(db, 'lateRequests', date), { status, decidedAt: Date.now() });
+  pingOdin(status === 'approved'
+    ? `✅ Odin approved excusing <b>${date}</b>. Serene's points and streak will be restored when her app opens.`
+    : `❌ Odin declined excusing <b>${date}</b>. The penalty stays.`);
 }
 
 async function approveDay(dateStr, live){

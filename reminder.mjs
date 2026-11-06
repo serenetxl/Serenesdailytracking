@@ -40,6 +40,83 @@ export function decodeFields(f) {
   return o;
 }
 
+// ---- "activity is slow" watch ----
+// Runs once a day (evening run). If Serene's numbers haven't moved for SLOW_DAYS days it
+// tells Odin once, then again every SLOW_DAYS days while it stays flat. Skipped while Away mode is on.
+// "Numbers" = FYCC total, the pipeline (cases, stages, FYC), and the running totals of FYCC earned,
+// appointments and follow-ups across all weeks. The last-seen fingerprint is kept in meta/activityWatch.
+export const SLOW_DAYS = 7;
+export function activityFingerprint(state) {
+  const sum = key => [state.currentWeek, ...(state.weekHistory || [])]
+    .reduce((t, w) => t + (Number(w && w.stats && w.stats[key]) || 0), 0);
+  const cases = (state.pipeline && state.pipeline.cases || [])
+    .map(c => `${c.id}:${c.stage}:${Number(c.fyc) || 0}`).sort();
+  return JSON.stringify({
+    fycc: Number(state.goal && state.goal.currentFYCC) || 0,
+    earned: sum("fycc"), appts: sum("appointments"), follow: sum("followups"), cases
+  });
+}
+export function activityCheck(state, watch, today) {
+  const sig = activityFingerprint(state);
+  const away = (state.awayDays || []).includes(today);
+  if (!watch || watch.sig !== sig || away) return { next: { sig, since: today, lastPing: (watch && watch.lastPing) || null }, ping: null };
+  const flat = daysBetween(watch.since, today);
+  const lastPing = watch.lastPing || null;
+  if (flat >= SLOW_DAYS && (!lastPing || daysBetween(lastPing, today) >= SLOW_DAYS)) {
+    const f = JSON.parse(sig);
+    const text = `📉 <b>Heads up:</b> Serene's numbers haven't moved for ${flat} days.\n` +
+      `• FYCC progress: $${f.fycc.toLocaleString("en-SG")}\n` +
+      `• Pipeline: ${f.cases.length} case${f.cases.length === 1 ? "" : "s"}, nothing changed stage or value\n` +
+      `• No new appointments or follow-ups logged\n` +
+      `Activity looks slow. (Auto-check; if she's been busy offline, she may just not have logged it.)`;
+    return { next: { sig, since: watch.since, lastPing: today }, ping: text };
+  }
+  return { next: { sig, since: watch.since, lastPing }, ping: null };
+}
+const encStr = v => v == null ? { nullValue: null } : { stringValue: String(v) };
+
+async function runActivityWatch(auth, today) {
+  const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/meta`;
+  const headers = { Authorization: `Bearer ${auth.idToken}` };
+  const stRes = await fetch(`${base}/state`, { headers });
+  if (!stRes.ok) throw new Error("Could not read state: " + stRes.status);
+  const state = decodeFields((await stRes.json()).fields || {});
+  const wRes = await fetch(`${base}/activityWatch`, { headers });
+  const watch = wRes.ok ? decodeFields((await wRes.json()).fields || {}) : null;
+  const { next, ping } = activityCheck(state, watch, today);
+  if (process.env.DRY_RUN) { console.log("Activity watch:", JSON.stringify(next), ping ? "\n" + ping : "(no ping)"); return; }
+  if (ping) {
+    const { TELEGRAM } = await import("./engine.js");
+    const r = await fetch(`https://api.telegram.org/bot${TELEGRAM.BOT_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: ping, parse_mode: "HTML" })
+    });
+    if (!r.ok) throw new Error("Odin ping failed: " + (await r.text()));
+    console.log("Slow-activity ping sent to Odin.");
+  }
+  const w = await fetch(`${base}/activityWatch`, {
+    method: "PATCH", headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { sig: encStr(next.sig), since: encStr(next.since), lastPing: encStr(next.lastPing) } })
+  });
+  if (!w.ok) throw new Error("Could not save activity watch: " + w.status);
+}
+
+// ---- "submit your day" nudge ----
+// Runs late in the evening. If today isn't submitted yet (and it's not an away day) it sends
+// Serene a Telegram message, so a forgotten Submit Day doesn't quietly break the streak.
+export function submitNudge(state, today) {
+  if ((state.awayDays || []).includes(today)) return null;
+  const t = state.today || {};
+  if (t.date === today && t.submittedForApproval) return null;
+  const done = (t.quests || []).filter(q => q && q.status === "completed").length;
+  const streak = Number(state.points && state.points.streakDays) || 0;
+  const opened = t.date === today;
+  return `⏰ <b>Submit your day</b>\n` +
+    (opened ? `Quests ${done}/3 so far. ` : `You haven't opened the app today. `) +
+    (streak > 0 ? `Your ${streak}-day streak is on the line.` : `Don't let today roll over unsubmitted.`) +
+    `\nOpen the app and press Submit Day before 3am.`;
+}
+
 // ---- build the message ----
 const CLASS_ORDER = ["A", "B", "C", "D"];
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -116,7 +193,8 @@ export function buildMessage(data, today, mode) {
 }
 
 async function main() {
-  const mode = process.argv[2] === "evening" ? "evening" : "morning";
+  const arg = process.argv[2];
+  const mode = arg === "evening" ? "evening" : arg === "submit" ? "submit" : "morning";
   const password = process.env.FIREBASE_PASSWORD;
   if (!password) throw new Error("FIREBASE_PASSWORD secret is missing");
 
@@ -126,6 +204,28 @@ async function main() {
   });
   const auth = await signIn.json();
   if (!signIn.ok) throw new Error("Sign-in failed: " + (auth.error && auth.error.message));
+
+  if (mode === "submit") {
+    const stRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/meta/state`, { headers: { Authorization: `Bearer ${auth.idToken}` } });
+    if (!stRes.ok) throw new Error("Could not read state: " + stRes.status);
+    const msg = submitNudge(decodeFields((await stRes.json()).fields || {}), sgLogicalToday());
+    if (!msg) { console.log("Already submitted (or away). No nudge."); return; }
+    if (process.env.DRY_RUN) { console.log(msg); return; }
+    const tok = process.env.TELEGRAM_BOT_TOKEN, chatId = process.env.TELEGRAM_CHAT_ID;
+    if (!tok || !chatId) throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret is missing");
+    const nb = { chat_id: chatId, text: msg, parse_mode: "HTML" };
+    if (process.env.TELEGRAM_THREAD_ID) nb.message_thread_id = Number(process.env.TELEGRAM_THREAD_ID);
+    const r = await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nb) });
+    if (!r.ok) throw new Error("Telegram failed: " + (await r.text()));
+    console.log("Submit nudge sent.");
+    return;
+  }
+
+  // Evening run only: check whether Serene's numbers have gone flat. Never blocks the reminder.
+  if (mode === "evening") {
+    try { await runActivityWatch(auth, sgLogicalToday()); }
+    catch (e) { console.error("Activity watch failed (non-fatal): " + e.message); }
+  }
 
   const res = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/private/contacts`, {
     headers: { Authorization: `Bearer ${auth.idToken}` }
