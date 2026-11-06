@@ -101,6 +101,44 @@ async function runActivityWatch(auth, today) {
   if (!w.ok) throw new Error("Could not save activity watch: " + w.status);
 }
 
+// ---- reminder for Odin: things waiting for his approval ----
+// Runs with the morning job. Lists every submitted day still waiting, with its date and how old it is,
+// plus any late-submit requests, and posts it in the tracker topic where Odin already gets the other pings.
+export function approvalNudge(state, lateReqs, today) {
+  const waiting = [];
+  const t = state.today || {};
+  if (t.date && t.submittedForApproval && t.approval && t.approval.status === "pending") waiting.push(t.date);
+  (state.dayHistory || []).slice(0, 10).forEach(d => { if (d.submitted && d.approval === "pending") waiting.push(d.date); });
+  const late = (lateReqs || []).filter(r => r && r.status === "pending");
+  if (!waiting.length && !late.length) return null;
+  const nice = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const ago = d => { const n = daysBetween(d, today); return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`; };
+  const lines = ["⏳ <b>Waiting for your approval</b>"];
+  [...new Set(waiting)].sort().reverse().forEach(d => lines.push(`• ${nice(d)} (${ago(d)})`));
+  late.forEach(r => lines.push(`• Late-submit request for ${nice(r.date)}`));
+  lines.push("Open the panel to approve or decline.");
+  return lines.join("\n");
+}
+async function runApprovalNudge(auth, today) {
+  const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+  const headers = { Authorization: `Bearer ${auth.idToken}` };
+  const stRes = await fetch(`${base}/meta/state`, { headers });
+  if (!stRes.ok) throw new Error("Could not read state: " + stRes.status);
+  const state = decodeFields((await stRes.json()).fields || {});
+  const lr = await fetch(`${base}/lateRequests`, { headers });
+  const late = lr.ok ? ((await lr.json()).documents || []).map(d => decodeFields(d.fields || {})) : [];
+  const msg = approvalNudge(state, late, today);
+  if (!msg) { console.log("Nothing waiting for Odin."); return; }
+  if (process.env.DRY_RUN) { console.log(msg); return; }
+  const { TELEGRAM } = await import("./engine.js");
+  const r = await fetch(`https://api.telegram.org/bot${TELEGRAM.BOT_TOKEN}/sendMessage`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: TELEGRAM.CHAT_ID, message_thread_id: TELEGRAM.THREAD_ID, text: msg, parse_mode: "HTML" })
+  });
+  if (!r.ok) throw new Error("Odin approval nudge failed: " + (await r.text()));
+  console.log("Approval nudge sent to Odin.");
+}
+
 // ---- "submit your day" nudge ----
 // Runs late in the evening. If today isn't submitted yet (and it's not an away day) it sends
 // Serene a Telegram message, so a forgotten Submit Day doesn't quietly break the streak.
@@ -219,6 +257,12 @@ async function main() {
     if (!r.ok) throw new Error("Telegram failed: " + (await r.text()));
     console.log("Submit nudge sent.");
     return;
+  }
+
+  // Morning run only: tell Odin if anything is waiting for his approval. Never blocks the reminder.
+  if (mode === "morning") {
+    try { await runApprovalNudge(auth, sgLogicalToday()); }
+    catch (e) { console.error("Approval nudge failed (non-fatal): " + e.message); }
   }
 
   // Evening run only: check whether Serene's numbers have gone flat. Never blocks the reminder.

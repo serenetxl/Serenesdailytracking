@@ -376,7 +376,7 @@ export function evaluateWeek(entry, dayHistory, awayDays = []) {
   const dailyOk = dates.every(dt => {
     if (away.has(dt)) return true;
     const d = byDate.get(dt);
-    return !!d && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
+    return !!d && !d.notSubmitted && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
   });
   const exercise = dates.filter(dt => (byDate.get(dt) || {}).exerciseApproved === "approved").length;
   const appointments = (entry.stats && entry.stats.appointments) || 0;
@@ -437,7 +437,8 @@ export function payWeeklyPoints(weekHistory, points, payFrom) {
 // hit, the weekly count resets to 0 and the next block starts the Monday after.
 // A missed daily ends the run, and the next run starts fresh.
 export function dayClearsBar(d) {
-  return !!d && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
+  // A day that was never submitted doesn't count (notSubmitted is set when a day rolls over unsubmitted).
+  return !!d && !d.notSubmitted && (d.streakKeeperUsed === true || (d.questsTotal > 0 && d.questsDone >= d.questsTotal));
 }
 
 // weekHistory must already be reconciled (reconcileWeekHistory) so exercise is current.

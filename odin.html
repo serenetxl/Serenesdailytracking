@@ -245,6 +245,24 @@ setTimeout(function(){
 function logicalNow(){ return new Date(Date.now() - 3 * 3600 * 1000); }
 function logicalToday(){ const d = logicalNow(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
+const ODIN_BUILD = 2026110604;
+async function checkOdinVersion(){
+  try{
+    const url = location.href.split('#')[0].split('?')[0];
+    const r = await fetch(url + '?_=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/const ODIN_BUILD = (\d+)/);
+    if(m && Number(m[1]) > ODIN_BUILD && !document.getElementById('staleBanner')){
+      const b = document.createElement('div'); b.id = 'staleBanner';
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:12px 14px;font-size:14px;text-align:center;cursor:pointer';
+      b.textContent = 'A newer version is available. Tap here to update.';
+      b.onclick = () => { location.href = url + '?v=' + Date.now(); };
+      document.body.appendChild(b);
+    }
+  }catch(e){}
+}
+checkOdinVersion(); setInterval(checkOdinVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkOdinVersion(); });
+
 window.__booted = true;
 import {
   initFirebase, signInWithEmailAndPassword, onAuthStateChanged, signOut,
@@ -339,18 +357,32 @@ function renderApprovals(){
     }
   });
   if(!items.length){ wrap.innerHTML = '<p class="sub">Nothing pending.</p>'; return; }
-  wrap.innerHTML = items.map(it => `
+  const dayMs = 86400000;
+  const daysAgo = d => Math.round((new Date(logicalToday() + 'T00:00:00') - new Date(d + 'T00:00:00')) / dayMs);
+  const nice = d => new Date(d + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
+  const short = d => new Date(d + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+  const agoText = n => n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`;
+  items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const row = it => {
+    const n = daysAgo(it.date);
+    return `
     <div class="row">
-      <span>${it.date} — quests ${it.quests}/3, energy ${it.energy || '—'}<br>
+      <span><b>${nice(it.date)}</b> <small style="opacity:.7">${agoText(n)}</small><br>
+        quests ${it.quests}/3, energy ${it.energy || '—'}<br>
         touchpoint ${it.touchpoint.logged ? it.touchpoint.approved : '—'}${it.touchpoint.logged ? (it.touchpoint.photoUrl ? ` · ${proofLink(it.touchpoint.photoUrl)}` : ' · <span style="color:var(--amber)">no photo</span>') : ''}<br>
         exercise ${it.exercise.logged ? it.exercise.approved : '—'}${it.exercise.logged ? (it.exercise.photoUrl ? ` · ${proofLink(it.exercise.photoUrl)}` : ' · <span style="color:var(--amber)">no photo</span>') : ''}
       </span>
       <span>
-        ${it.touchpoint.logged && it.touchpoint.approved === 'pending' ? `<button class="approve" data-tpapprove="${it.date}" data-live="${it.live}">Approve touchpoint</button>` : ''}
-        ${it.exercise.logged && it.exercise.approved === 'pending' ? `<button class="approve" data-exapprove="${it.date}" data-live="${it.live}">Approve exercise</button>` : ''}
-        <button class="approve" data-approve="${it.date}" data-live="${it.live}">Approve day</button>
+        ${it.touchpoint.logged && it.touchpoint.approved === 'pending' ? `<button class="approve" data-tpapprove="${it.date}" data-live="${it.live}">Approve touchpoint (${short(it.date)})</button>` : ''}
+        ${it.exercise.logged && it.exercise.approved === 'pending' ? `<button class="approve" data-exapprove="${it.date}" data-live="${it.live}">Approve exercise (${short(it.date)})</button>` : ''}
+        <button class="approve" data-approve="${it.date}" data-live="${it.live}">Approve ${short(it.date)}</button>
       </span>
-    </div>`).join('');
+    </div>`;
+  };
+  // Recent days first; anything older than 2 days is shown separately so it isn't approved by mistake.
+  const recent = items.filter(it => daysAgo(it.date) <= 2), older = items.filter(it => daysAgo(it.date) > 2);
+  wrap.innerHTML = (recent.length ? recent.map(row).join('') : '<p class="sub">Nothing from the last 2 days.</p>')
+    + (older.length ? `<p class="sub" style="margin:14px 0 4px;color:var(--amber)"><b>Older, still waiting</b> — check the date before approving</p>` + older.map(row).join('') : '');
   items.forEach(it => {
     const b = wrap.querySelector(`[data-approve="${it.date}"]`);
     if(b) b.onclick = () => approveDay(it.date, it.live);
@@ -403,7 +435,7 @@ async function approveDay(dateStr, live){
     const dayHistory = state.dayHistory.map(d => d.date === dateStr ? { ...d, approval: 'approved' } : d);
     await updateDoc(stateRef, { dayHistory });
   }
-  pingOdin(`✅ Odin approved <b>${dateStr}</b>.`);
+  pingOdin(`✅ Odin approved <b>${new Date(dateStr + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' })}</b> (${dateStr}).`);
 }
 // Approving proof pays its points if the day has already settled (submitted
 // or rolled over) and they haven't been paid yet. If the day is still open,

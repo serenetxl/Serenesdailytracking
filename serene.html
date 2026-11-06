@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov c</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -1341,7 +1341,31 @@ async function loadState(){
   return merged;
 }
 
+/* ---------- Out-of-date copy guard ----------
+   Bump APP_BUILD on every release. An open copy that is older than what's deployed stops saving and
+   scoring (so a stale tab/phone can't overwrite newer data) and shows a banner to reload. */
+const APP_BUILD = 2026110604;
+let appStale = false;
+async function checkAppVersion(){
+  try{
+    const url = location.href.split('#')[0].split('?')[0];
+    const r = await fetch(url + '?_=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/const APP_BUILD = (\d+)/);
+    if(m && Number(m[1]) > APP_BUILD && !appStale){
+      appStale = true;
+      const b = document.createElement('div');
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:12px 14px;font-size:14px;text-align:center;cursor:pointer';
+      b.textContent = 'A newer version is available. Tap here to update (this copy is paused so it can\'t overwrite your data).';
+      b.onclick = () => { location.href = url + '?v=' + Date.now(); };
+      document.body.appendChild(b);
+    }
+  }catch(e){ /* offline: try again later */ }
+}
+setInterval(checkAppVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkAppVersion(); });
+
 function saveState(){
+  if(appStale) return;
   state.updatedAt = Date.now();
   ignoreNextLocalEcho = true;
   setDoc(stateRef, state).catch(e => { console.error('Save failed', e); showToast('Could not save — check connection'); });
@@ -1406,6 +1430,7 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 async function checkDailyReset(){
+  if(appStale) return;
   const todayStr = logicalToday();
   if(state.today.date !== todayStr) await adoptRemoteIfNewer(); // don't settle from a stale copy
   // A quest can't be "in progress" from an earlier day: if one still carries
@@ -1427,15 +1452,21 @@ async function checkDailyReset(){
     // incomplete day so points/streak/pings still happen even if she never
     // opened the app to hit "Submit Day".
     const awayThatDay = (state.awayDays || []).includes(t.date);   // Away mode: no penalties, nothing to settle
-    if(!t.submittedForApproval && !awayThatDay){
+    // Never settle the same day twice (a second device or stale tab would otherwise add a penalty
+    // on top of a day that was already scored).
+    const alreadySettled = !!state.points.lastDayProcessed && state.points.lastDayProcessed >= t.date;
+    if(!t.submittedForApproval && !awayThatDay && !alreadySettled){
       // Work dailies are her own private system — they don't count as an update to Odin.
       // Posting the day's agenda to Odin counts as an update (her rule: report the 3 agendas AND do them).
-      const anyUpdatePosted = questsDone > 0 || !!t.energy || t.touchpoint.logged || !!t.agendaPinged;
-      const { points: newPoints, events } = settleDay(state.points, {
-        date: t.date, questsCompleted: questsDone, totalQuests: 3,
-        touchpointLogged: t.touchpoint.logged && t.touchpoint.approved === 'approved', exerciseApproved: t.exercise.approved === 'approved',
-        anyUpdatePosted, streakKeeperSpent: false
+      // Rule: a day that isn't submitted doesn't count. It's scored as a missed day and the streak breaks,
+      // whatever was done in the app. (Submit Day is what makes a day count.)
+      const { points: newPoints, events: rawEvents } = settleDay(state.points, {
+        date: t.date, questsCompleted: 0, totalQuests: 3,
+        touchpointLogged: false, exerciseApproved: false,
+        anyUpdatePosted: false, streakKeeperSpent: false
       });
+      const events = rawEvents.map(e => ({ ...e,
+        reason: e.reason === 'No daily update posted' ? 'Day not submitted' : e.reason === 'Streak broken (no update posted)' ? 'Streak broken (day not submitted)' : e.reason }));
       noteBreak(state.points, events, t.date);
       state.points = newPoints;
       markProofPointsAwarded(t);
@@ -1458,7 +1489,8 @@ async function checkDailyReset(){
         submitted: t.submittedForApproval, approval: t.approval.status,
         // Lets Odin's panel award touchpoint/exercise points if he approves after the day settled.
         touchpointAwarded: !!t.touchpoint.pointsAwarded, exerciseAwarded: !!t.exercise.pointsAwarded,
-        streakKeeperUsed: !!t.streakKeeperUsed
+        streakKeeperUsed: !!t.streakKeeperUsed,
+        notSubmitted: !t.submittedForApproval
       });
     }
 
@@ -1550,6 +1582,7 @@ onAuthStateChanged(auth, async (user) => {
       startContactsSync();
       state = await loadState();
       startLateSync();
+      await Promise.race([checkAppVersion(), new Promise(r => setTimeout(r, 4000))]);   // an old copy must not settle days or save
       await checkDailyReset();
       checkWeeklyReset();
       applyWeeklyPoints();
