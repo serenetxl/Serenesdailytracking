@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 6 Nov d</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 9 Nov a</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -761,6 +761,8 @@
           <div class="mini-stat"><span id="touchpointCount">0</span> / 50</div>
           <input type="file" id="touchpointPhotoInput" accept="image/*" style="display:block;margin-bottom:8px;font-size:12px">
           <button class="ghost-btn" id="touchpointBtn">Log a touchpoint today</button>
+          <button class="ghost-btn" id="touchpointRestBtn" style="margin-top:6px">Rest day (skip touchpoint)</button>
+          <div class="empty-note" style="padding:4px 0 0;font-size:12px" id="touchpointRestNote"></div>
           <div class="empty-note" style="padding:6px 0 0" id="touchpointPhotoNote"></div>
         </div>
         <div>
@@ -1191,6 +1193,7 @@ function defaultToday(dateStr){
     agendaPinged: false,
     timer: defaultTimer(),
     touchpoint: { logged: false, photoUrl: null, approved: 'none' },
+    touchpointRest: false,
     exercise: { logged: false, approved: 'none', photoUrl: null },
     submittedForApproval: false,
     approval: { status: 'none' }
@@ -1344,7 +1347,7 @@ async function loadState(){
 /* ---------- Out-of-date copy guard ----------
    Bump APP_BUILD on every release. An open copy that is older than what's deployed stops saving and
    scoring (so a stale tab/phone can't overwrite newer data) and shows a banner to reload. */
-const APP_BUILD = 2026110605;
+const APP_BUILD = 2026110606;
 let appStale = false;
 async function checkAppVersion(){
   try{
@@ -1479,6 +1482,8 @@ async function checkDailyReset(){
       }
     }
 
+    closeTouchpointDays(t, todayStr);
+
     if(hadActivity && !awayThatDay){
       state.dayHistory.unshift({
         date: t.date, checklistDone, checklistTotal: DAILY_TEMPLATE_OLD.length,
@@ -1507,6 +1512,27 @@ async function checkDailyReset(){
     state.today = defaultToday(todayStr);
     releaseScheduledQuests();
     saveState();
+  }
+}
+
+// Touchpoint challenge: every closed day needs a logged touchpoint, a rest day or an away day.
+// Anything else resets the counter to 0. lastClosed makes sure a day is only ever judged once.
+function closeTouchpointDays(t, todayStr){
+  const tc = state.touchpointChallenge;
+  if(!tc.lastClosed) tc.lastClosed = addDaysLocal(t.date, -1);   // the rule starts from the first day after this update
+  let d = addDaysLocal(tc.lastClosed, 1), guard = 0;
+  while(d < todayStr && guard++ < 400){
+    const away = (state.awayDays || []).includes(d);
+    if(!away){
+      if(d === t.date && t.touchpoint.logged){ /* counted when it was logged */ }
+      else if(d === t.date && t.touchpointRest){ tc.restDays = (tc.restDays || 0) + 1; }
+      else if(tc.count > 0){
+        pingOdin(`🔁 <b>${d}</b>: no touchpoint and no rest day. Touchpoint challenge reset from ${tc.count}/50 to 0.`);
+        tc.count = 0; tc.startedAt = null; tc.lastReset = d;
+      }
+    }
+    tc.lastClosed = d;
+    d = addDaysLocal(d, 1);
   }
 }
 
@@ -2336,6 +2362,10 @@ function renderTouchpointExercise(){
     ? (state.today.touchpoint.approved === 'approved' ? 'Logged — approved ✓' : state.today.touchpoint.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
     : 'Log a touchpoint today (photo required)';
   document.getElementById('touchpointPhotoNote').textContent = proofNoteText('touchpoint');
+  const restBtn = document.getElementById('touchpointRestBtn');
+  restBtn.disabled = !!state.today.touchpoint.logged;
+  restBtn.textContent = state.today.touchpointRest ? 'Rest day set. Tap to undo' : 'Rest day (skip touchpoint)';
+  document.getElementById('touchpointRestNote').textContent = 'A day with no touchpoint and no rest day resets this to 0. Rest days used: ' + (state.touchpointChallenge.restDays || 0) + '.';
   const exLine = document.getElementById('exerciseStatusLine');
   exLine.textContent = state.today.exercise.logged
     ? (state.today.exercise.approved === 'approved' ? 'Logged — approved ✓' : state.today.exercise.approved === 'rejected' ? 'Logged — not approved' : 'Logged — pending Odin')
@@ -2438,6 +2468,7 @@ function wireTouchpointExercise(){
       const url = await withTimeout(saveProofPhoto(kind, date, file), 60000);
       if(state.today.date !== date) throw new Error('day changed during upload');
       state.today[kind] = { logged: true, approved: 'pending', photoUrl: url };
+      if(kind === 'touchpoint') state.today.touchpointRest = false;
       if(kind === 'touchpoint') state.touchpointChallenge = logTouchpoint(state.touchpointChallenge);
       fileInput.value = ''; proofNote[kind] = '';
       saveState(); renderTouchpointExercise();
@@ -2450,6 +2481,17 @@ function wireTouchpointExercise(){
     }
   }
   document.getElementById('touchpointBtn').addEventListener('click', () => logWithPhoto('touchpoint', 'touchpoint'));
+  document.getElementById('touchpointRestBtn').addEventListener('click', () => {
+    const t = state.today;
+    if(t.touchpoint.logged){ showToast('Already logged a touchpoint today'); return; }
+    t.touchpointRest = !t.touchpointRest;
+    saveState(); renderTouchpointExercise();
+    const c = state.touchpointChallenge.count;
+    pingOdin(t.touchpointRest
+      ? `😴 <b>${t.date}</b>: Serene took a touchpoint rest day. Challenge stays at ${c}/50.`
+      : `↩️ <b>${t.date}</b>: Serene undid the touchpoint rest day.`);
+    showToast(t.touchpointRest ? 'Rest day set. Touchpoint challenge stays safe' : 'Rest day removed');
+  });
   document.getElementById('exerciseBtn').addEventListener('click', () => logWithPhoto('exercise', 'exercise session'));
 }
 
