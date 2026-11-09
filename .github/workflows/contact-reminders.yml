@@ -4,7 +4,7 @@ on:
   workflow_dispatch:        # started by cron-job.org (11:00 and 17:00 SGT), or by you pressing "Run workflow"
     inputs:
       mode:
-        description: "morning or evening"
+        description: "morning, evening or submit"
         default: "morning"
 
 jobs:
@@ -22,5 +22,5 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           MODE="${{ inputs.mode }}"
-          if [ "$MODE" != "evening" ]; then MODE=morning; fi
+          if [ "$MODE" != "evening" ] && [ "$MODE" != "submit" ]; then MODE=morning; fi
           node reminder.mjs $MODE
