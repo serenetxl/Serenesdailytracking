@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 9 Nov a</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 12 Nov a</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -823,8 +823,12 @@
     </div>
     <!-- Away mode (collapsed, bottom of dashboard) -->
     <details class="card" id="awayCard">
-      <summary class="card-title" style="cursor:pointer"><span class="icon">✈</span>Away mode (travelling)</summary>
+      <summary class="card-title" style="cursor:pointer"><span class="icon">✈</span>Away / MC mode</summary>
       <div id="awayStatus" class="empty-note" style="padding:8px 0"></div>
+      <div style="margin-bottom:6px"><select class="td-input" id="awayReason" style="width:auto">
+        <option value="travel">Reason: Travelling</option>
+        <option value="mc">Reason: MC (sick)</option>
+      </select></div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
         <input class="td-input" type="date" id="awayFrom" style="width:auto">
         <span style="opacity:.7">to</span>
@@ -1347,7 +1351,7 @@ async function loadState(){
 /* ---------- Out-of-date copy guard ----------
    Bump APP_BUILD on every release. An open copy that is older than what's deployed stops saving and
    scoring (so a stale tab/phone can't overwrite newer data) and shows a banner to reload. */
-const APP_BUILD = 2026110606;
+const APP_BUILD = 2026111201;
 let appStale = false;
 async function checkAppVersion(){
   try{
@@ -2556,16 +2560,18 @@ function niceDate(d){ return parseDate(d).toLocaleDateString('en-SG', { day: 'nu
 function renderAway(){
   const st = document.getElementById('awayStatus'); if(!st) return;
   const a = state.away, today = logicalToday();
+  const mc = !!(a && a.reason === 'mc');
   const clr = document.getElementById('awayClear'), bn = document.getElementById('awayBanner');
   if(a && a.to >= today){
     const on = a.from <= today;
-    st.textContent = on ? `Away ${niceDate(a.from)} – ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `Away mode set for ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
+    st.textContent = on ? `${mc ? 'MC' : 'Away'} ${niceDate(a.from)} – ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `${mc ? 'MC' : 'Away mode'} set for ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
     document.getElementById('awayFrom').value = a.from; document.getElementById('awayTo').value = a.to;
+    document.getElementById('awayReason').value = mc ? 'mc' : 'travel';
     clr.style.display = '';
-    bn.style.display = ''; bn.textContent = on ? `✈ Away until ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `✈ Away ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
+    bn.style.display = ''; bn.textContent = on ? `${mc ? '🤒 On MC' : '✈ Away'} until ${niceDate(a.to)}. Streak frozen, nothing to submit.` : `${mc ? '🤒 MC' : '✈ Away'} ${niceDate(a.from)} – ${niceDate(a.to)}. Starts ${a.from === addDaysLocal(today, 1) ? 'tomorrow' : niceDate(a.from)}.`;
   } else {
     bn.style.display = 'none';
-    st.textContent = 'Off. Set the dates when you travel and your streak, dailies and weekly targets pause.';
+    st.textContent = 'Off. Set the dates when you travel or are on MC and your streak, dailies and weekly targets pause.';
     clr.style.display = 'none';
   }
 }
@@ -2576,7 +2582,8 @@ async function setAway(){
   const days = awayExpand(from, to);
   if(days.length > 31){ showToast('Max 31 days at a time. Talk to Odin for longer.'); return; }
   const past = to < today;   // correcting a trip that already ended: only mark the days, no banner
-  state.away = past ? state.away : { from, to };
+  const reason = (document.getElementById('awayReason').value === 'mc') ? 'mc' : 'travel';
+  state.away = past ? state.away : { from, to, reason };
   // keep days that already happened plus the new range
   state.awayDays = [...new Set([...(state.awayDays || []).filter(d => d < today && !days.includes(d)), ...days])].sort();
   state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
@@ -2586,20 +2593,22 @@ async function setAway(){
     const n = Math.max(1, tdDaysBetween(today, to) + 1);
     ctPause(n);
   }
-  pingOdin(`✈️ Serene is away <b>${from}</b> to <b>${to}</b> (${days.length} days). Streak is frozen and dailies/weekly targets are paused for those days.`);
-  showToast('Away mode set');
+  pingOdin(reason === 'mc'
+    ? `🤒 Serene is on MC <b>${from}</b> to <b>${to}</b> (${days.length} day${days.length > 1 ? 's' : ''}). Streak is frozen and dailies/weekly targets are paused for those days.`
+    : `✈️ Serene is away <b>${from}</b> to <b>${to}</b> (${days.length} days). Streak is frozen and dailies/weekly targets are paused for those days.`);
+  showToast(reason === 'mc' ? 'MC set. Rest well' : 'Away mode set');
 }
 async function clearAway(){
   const today = logicalToday();
   if(!state.away) return;
-  const from = state.away.from;
+  const from = state.away.from, wasMc = state.away.reason === 'mc';
   // days already passed stay away; today and later go back to normal
   state.awayDays = (state.awayDays || []).filter(d => d < today);
-  state.away = from < today ? { from, to: addDaysLocal(today, -1) } : null;
+  state.away = from < today ? { from, to: addDaysLocal(today, -1), reason: wasMc ? 'mc' : 'travel' } : null;
   state.weekHistory = reconcileWeekHistory(state.weekHistory, state.dayHistory, state.awayDays);
   state.rewardItems = refreshConditionalRewards(state.rewardItems, rollingNow().weeks, logicalNow());
   saveState(); renderAway(); renderSubmitStatus(); renderPointsBadge();
-  pingOdin(`🏠 Serene is back from Away mode. Streak and dailies are live again from ${today}.`);
+  pingOdin(`🏠 Serene is back from ${wasMc ? 'MC' : 'Away mode'}. Streak and dailies are live again from ${today}.`);
   showToast('Welcome back');
 }
 // Marks a day as excused, gives the penalty back and restores the streak.
@@ -2765,6 +2774,17 @@ async function submitDay(){
   // Work dailies are her own private system — they don't count as an update to Odin.
   const anyUpdatePosted = questsCompleted > 0 || !!t.energy || t.touchpoint.logged || !!t.agendaPinged;
   const allCleared = questsCompleted >= totalQuests;
+
+  // Incomplete day: spell out the cost first so it can't be submitted by accident.
+  if(!allCleared){
+    const streakNow = state.points.streakDays || 0;
+    const hasKeeper = streakNow > 0 && (state.keepersHeld || 0) > 0;
+    const msg = `Only ${questsCompleted}/${totalQuests} dailies done.\n\n` +
+      (hasKeeper ? `Submitting costs -10 pts. Your Daily Streak Keeper will be used, so your ${streakNow}-day streak is kept.`
+                 : `Submitting costs -10 pts` + (streakNow > 0 ? ` and breaks your ${streakNow}-day streak.` : '.')) +
+      `\n\nSubmit anyway?`;
+    if(!window.confirm(msg)) return;
+  }
 
   let streakKeeperSpent = false;
   if(!allCleared && state.points.streakDays > 0 && (state.keepersHeld || 0) > 0){
