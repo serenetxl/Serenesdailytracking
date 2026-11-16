@@ -571,7 +571,7 @@
     <div class="tagline">
       <span id="todayLabel">—</span>
       <span class="points-badge">⭐ <span id="pointsTotal">0</span> pts · 🔥 <span id="streakDays">0</span>d (<span id="streakMult">1x</span>)</span>
-      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 12 Nov a</span>
+      <button class="signout-link" id="signoutBtn">Sign out</button><span style="opacity:.55">build 16 Nov a</span>
     </div>
     <nav class="tabs">
       <button class="active" data-view="dashboard">Dashboard</button>
@@ -1351,7 +1351,7 @@ async function loadState(){
 /* ---------- Out-of-date copy guard ----------
    Bump APP_BUILD on every release. An open copy that is older than what's deployed stops saving and
    scoring (so a stale tab/phone can't overwrite newer data) and shows a banner to reload. */
-const APP_BUILD = 2026111201;
+const APP_BUILD = 2026111601;
 let appStale = false;
 async function checkAppVersion(){
   try{
@@ -2808,15 +2808,17 @@ async function submitDay(){
   saveState();
   renderPointsBadge(); renderSubmitStatus(); renderRewards();
 
+  // A failed ledger write must never stop the message to Odin from going out.
   for(const ev of events){
-    await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: t.date, pingSent: ev.ping });
+    try{ await addDoc(collection(db, "pointsLedger"), { ts: serverTimestamp(), ...ev, date: t.date, pingSent: ev.ping }); }
+    catch(e){ console.error('Ledger write failed', e); }
     if(ev.ping){
       const emoji = ev.type === 'streak_break' ? '💔' : ev.type === 'streak_save' ? '🛟' : '⚠️';
       await pingOdin(`${emoji} <b>${t.date}</b>: ${ev.reason}${ev.amount ? ` (${ev.amount > 0 ? '+' : ''}${ev.amount} pts)` : ''}. Balance now ${newPoints.total}.`);
     }
   }
-  await pingOdin(`✅ Serene submitted <b>${t.date}</b> for approval. Quests ${questsCompleted}/3, points now ${newPoints.total}, streak ${newPoints.streakDays}d (${newPoints.multiplier}x).`);
-  showToast('Submitted to Odin');
+  const sentOk = await pingOdin(`✅ Serene submitted <b>${t.date}</b> for approval. Quests ${questsCompleted}/3, points now ${newPoints.total}, streak ${newPoints.streakDays}d (${newPoints.multiplier}x).`);
+  showToast(sentOk ? 'Submitted to Odin' : 'Submitted, but the Telegram message to Odin did not send. Tell him it is in his panel');
 }
 
 /* ---------- FYC challenges ---------- */
