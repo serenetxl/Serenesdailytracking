@@ -39,17 +39,22 @@ export async function pingOdin(text) {
     text,
     parse_mode: "HTML"
   };
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    return res.ok;
-  } catch (e) {
-    console.warn("Telegram ping failed (non-fatal):", e);
-    return false;
+  // Up to 3 tries, so one dropped request doesn't silently lose the message.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) return true;
+      console.warn("Telegram ping rejected:", res.status);
+    } catch (e) {
+      console.warn("Telegram ping failed:", e);
+    }
+    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
   }
+  return false;
 }
 
 // ----------------------------------------------------------------------------
